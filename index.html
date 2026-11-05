@@ -116,10 +116,11 @@
 <body>
 <div id="stage">
   <!-- data: id, label, class, landscape x/y/size, portrait x/y/size -->
-  <div class="pad cym"  data-snd="crash"  style="--lx:20;--ly:22;--ls:34;--px:25;--py:12;--ps:36"><span>Crash</span></div>
+  <div class="pad cym"  data-snd="crash"  style="--lx:23;--ly:22;--ls:32;--px:25;--py:12;--ps:36"><span>Crash</span></div>
   <div class="pad cym"  data-snd="splash" style="--lx:43;--ly:13;--ls:22;--px:50;--py:27;--ps:22"><span>Splash</span></div>
   <div class="pad cym"  data-snd="ride"   style="--lx:80;--ly:22;--ls:38;--px:74;--py:14;--ps:40"><span>Ride</span></div>
-  <div class="pad cym"  data-snd="hihat"  style="--lx:8;--ly:52;--ls:26;--px:17;--py:40;--ps:28"><span>Hi-hat</span></div>
+  <div class="pad cym"  data-snd="hhopen" style="--lx:10;--ly:32;--ls:24;--px:14;--py:31;--ps:24"><span>HH open</span></div>
+  <div class="pad cym"  data-snd="hihat"  style="--lx:10;--ly:62;--ls:24;--px:14;--py:44;--ps:24"><span>HH closed</span></div>
   <div class="pad drum" data-snd="tom1"   style="--lx:40;--ly:42;--ls:24;--px:45;--py:45;--ps:26"><span>Tom 1</span></div>
   <div class="pad drum" data-snd="tom2"   style="--lx:58;--ly:40;--ls:24;--px:72;--py:42;--ps:26"><span>Tom 2</span></div>
   <div class="pad drum" data-snd="tom3"   style="--lx:77;--ly:70;--ls:32;--px:74;--py:62;--ps:34"><span>Floor</span></div>
@@ -207,7 +208,8 @@ const Engine = (() => {
   function metal(v, t, { decay, bp, hp = 7000, base = 40, noiseAmt = 0, attack = 0.001 }) {
     const band = filter('bandpass', bp, 0.8);
     const high = filter('highpass', hp);
-    band.connect(high); high.connect(env(v, t, decay, attack));
+    const gains = [env(v, t, decay, attack)];
+    band.connect(high); high.connect(gains[0]);
     RATIOS.forEach(r => {
       const o = ctx.createOscillator(); o.type = 'square';
       o.frequency.value = base * r;
@@ -216,9 +218,18 @@ const Engine = (() => {
     });
     if (noiseAmt) {
       const nh = filter('highpass', hp - 1500);
-      nh.connect(env(v * noiseAmt, t, decay * 0.8, attack));
+      const ng = env(v * noiseAmt, t, decay * 0.8, attack);
+      gains.push(ng); nh.connect(ng);
       noise(t, decay + 0.1, nh);
     }
+    return gains;
+  }
+
+  // Closing the hi-hat chokes a ringing open hat
+  let openHat = [];
+  function choke(t) {
+    openHat.forEach(g => { g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(g.gain.value, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.03); });
+    openHat = [];
   }
 
   const sounds = {
@@ -227,7 +238,8 @@ const Engine = (() => {
     tom1:   (v, t) => tom(200, v, t),
     tom2:   (v, t) => tom(150, v, t),
     tom3:   (v, t) => tom(95, v, t),
-    hihat:  (v, t) => metal(v * 0.5, t, { decay: 0.06, bp: 10000 }),
+    hihat:  (v, t) => { choke(t); metal(v * 0.5, t, { decay: 0.06, bp: 10000 }); },
+    hhopen: (v, t) => { choke(t); openHat = metal(v * 0.45, t, { decay: 0.9, bp: 10000, noiseAmt: 0.5 }); },
     splash: (v, t) => metal(v * 0.45, t, { decay: 0.6, bp: 9000, noiseAmt: 0.8 }),
     crash:  (v, t) => metal(v * 0.5, t, { decay: 1.8, bp: 8000, hp: 6000, noiseAmt: 1.2, attack: 0.004 }),
     ride:   (v, t) => metal(v * 0.4, t, { decay: 1.3, bp: 6500, hp: 4500, base: 52, noiseAmt: 0.3 }),
@@ -263,7 +275,7 @@ document.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('gesturestart', e => e.preventDefault());
 
 /* Keyboard for desktop testing */
-const KEYS = { a: 'hihat', s: 'snare', d: 'tom1', f: 'tom2', g: 'tom3', ' ': 'kick', q: 'crash', w: 'splash', e: 'ride' };
+const KEYS = { z: 'hhopen', a: 'hihat', s: 'snare', d: 'tom1', f: 'tom2', g: 'tom3', ' ': 'kick', q: 'crash', w: 'splash', e: 'ride' };
 document.addEventListener('keydown', e => {
   const snd = KEYS[e.key.toLowerCase()];
   if (snd && !e.repeat) { Engine.init(); start.hidden = true; Engine.play(snd, 0.9); }
