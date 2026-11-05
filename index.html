@@ -22,6 +22,38 @@
     --brass-dark: #7a5a1c;
     --ink: #f3ece0;
     --ink-dim: #9c8f7d;
+  }
+  /* Skins: each kit has its own look; body[data-skin] swaps the tokens */
+  body {
+    --hoop-ring: transparent;
+    --drum-ink: #4a3f33;
+    --kick-head: #2b2622; --kick-edge: #1b1714; --kick-hoop: #3b4a5a; --kick-ink: var(--ink-dim);
+    --brass-light: #e6c374; --cym-ink: #3a2a0c;
+    --pad-radius: 50%;
+  }
+  body[data-skin="black-pearl"] {
+    --stage: #0f1013; --stage-glow: #23252b;
+    --head: #f4f2ec; --head-edge: #d2cec5; --hoop: #17171a; --hoop-ring: #9aa1aa; --drum-ink: #3b3d42;
+    --kick-head: #1c1d21; --kick-edge: #0d0d10; --kick-hoop: #17171a; --kick-ink: #9aa1aa;
+    --brass-light: #f2d98f; --brass: #d3a745; --brass-dark: #7d5b18; --cym-ink: #3a2a0c;
+  }
+  body[data-skin="red-zeppelin"] {
+    --stage: #170d09; --stage-glow: #351a10;
+    --head: #ecdfc3; --head-edge: #c7b088; --hoop: #a3301b; --hoop-ring: #d9a35a; --drum-ink: #5a3a22;
+    --kick-head: #7a1e13; --kick-edge: #4a110a; --kick-hoop: #a3301b; --kick-ink: #ecdfc3;
+    --brass-light: #d8b067; --brass: #ad7f2c; --brass-dark: #5a3f11; --cym-ink: #2e1f07;
+  }
+  body[data-skin="tr-808"] {
+    --stage: #1b1b1a; --stage-glow: #2b2b29;
+    --hoop: #0c0c0c; --hoop-ring: transparent; --drum-ink: #1b1b1a;
+    --kick-hoop: #0c0c0c; --kick-ink: #1b1b1a; --cym-ink: #1b1b1a;
+    --pad-radius: 16%;
+  }
+  body[data-skin="synth"] {
+    --stage: #0d1117; --stage-glow: #1a2432;
+    --head: #2b3647; --head-edge: #1b2432; --hoop: #3fb6c6; --hoop-ring: transparent; --drum-ink: #cfe2f5;
+    --kick-head: #1e2533; --kick-edge: #121722; --kick-hoop: #8c7cf0; --kick-ink: #cfe2f5;
+    --brass-light: #eef2f6; --brass: #aab4c0; --brass-dark: #57616d; --cym-ink: #18202b;
     --font-label: "Saira Condensed", "Arial Narrow", sans-serif;
     color-scheme: dark;
   }
@@ -55,7 +87,7 @@
     width: calc(var(--ls) * 1vmin);
     aspect-ratio: 1;
     transform: translate(-50%, -50%);
-    border-radius: 50%;
+    border-radius: var(--pad-radius);
     display: grid; place-items: center;
     cursor: pointer;
     touch-action: none;
@@ -79,22 +111,29 @@
   /* Drum heads: coated head, colored hoop */
   .drum {
     background: radial-gradient(circle at 45% 40%, var(--head) 0 55%, var(--head-edge) 70%);
-    box-shadow: 0 0 0 calc(var(--ls) * .045vmin) var(--hoop), 0 8px 18px rgba(0,0,0,.55);
+    box-shadow: 0 0 0 calc(var(--ls) * .045vmin) var(--hoop), 0 0 0 calc(var(--ls) * .06vmin) var(--hoop-ring), 0 8px 18px rgba(0,0,0,.55);
   }
-  .drum span { color: #4a3f33; }
-  .kick { --hoop: #3b4a5a; }
-  .kick { background: radial-gradient(circle at 45% 40%, #2b2622 0 50%, #1b1714 72%); }
-  .kick span { color: var(--ink-dim); }
+  .drum span { color: var(--drum-ink); }
+  .kick { --hoop: var(--kick-hoop); background: radial-gradient(circle at 45% 40%, var(--kick-head) 0 50%, var(--kick-edge) 72%); }
+  .kick span { color: var(--kick-ink); }
 
   /* Cymbals: brass with lathe grooves and a bell */
   .cym {
     background:
       radial-gradient(circle, var(--brass) 0 9%, var(--brass-dark) 10% 11%, transparent 12%),
       repeating-radial-gradient(circle, rgba(255,240,200,.08) 0 2px, rgba(0,0,0,.08) 2px 4px),
-      radial-gradient(circle at 40% 35%, #e6c374, var(--brass) 45%, var(--brass-dark));
+      radial-gradient(circle at 40% 35%, var(--brass-light), var(--brass) 45%, var(--brass-dark));
     box-shadow: 0 8px 20px rgba(0,0,0,.55);
   }
-  .cym span { color: #3a2a0c; transform: translateY(calc(var(--ls) * .22vmin)); }
+  .cym span { color: var(--cym-ink); transform: translateY(calc(var(--ls) * .22vmin)); }
+
+  /* TR-808 skin: flat square buttons in the machine's red / orange / yellow / cream */
+  body[data-skin="tr-808"] .pad { background: #ece6d4; box-shadow: 0 0 0 3px #0c0c0c, 0 6px 14px rgba(0,0,0,.6); }
+  body[data-skin="tr-808"] .pad[data-snd="kick"]  { background: #d8442a; }
+  body[data-skin="tr-808"] .pad[data-snd="snare"] { background: #eb8a2c; }
+  body[data-skin="tr-808"] .pad[data-snd^="tom"]  { background: #e7c449; }
+  body[data-skin="tr-808"] .cym span { transform: none; }
+  body[data-skin="tr-808"] .cym.hit { transform: translate(-50%, -50%) scale(.96); }
 
   .pad.hit { transform: translate(-50%, -50%) scale(.94); filter: brightness(1.25); transition: none; }
   .cym.hit { transform: translate(-50%, -50%) scale(.96) rotate(4deg); }
@@ -131,7 +170,7 @@
     pointer-events: none;
   }
 
-  .tools select {
+  .tools select, .tools #skin {
     font: 700 12px var(--font-label); letter-spacing: .08em; text-transform: uppercase;
     color: var(--ink); background: rgba(255,255,255,.08);
     border: 1px solid rgba(255,255,255,.18); border-radius: 6px; padding: 5px 6px;
@@ -251,6 +290,14 @@
   </span>
   <button id="sustain" type="button" class="piano-only" aria-pressed="false">Sustain</button>
   <button id="credits-btn" type="button">Credits</button>
+  <label class="sr" for="skin">Skin</label>
+  <select id="skin" hidden>
+    <option value="auto">Skin: match kit</option>
+    <option value="black-pearl">Skin: Black Pearl</option>
+    <option value="red-zeppelin">Skin: Red Zeppelin</option>
+    <option value="tr-808">Skin: TR-808</option>
+    <option value="synth">Skin: Synth</option>
+  </select>
   <button id="done" type="button" class="primary" hidden>Done</button>
   <button id="reset" type="button" hidden>Reset</button>
 </div>
@@ -512,7 +559,20 @@ const start = document.getElementById('start');
 const kitSel = document.getElementById('kit');
 try { const k = localStorage.getItem('melasa-instrument'); if (k && kitSel.querySelector(`option[value="${k}"]`)) kitSel.value = k; } catch (e) {}
 const hint = document.getElementById('hint');
+const skinSel = document.getElementById('skin');
+try { const sk = localStorage.getItem('melasa-skin'); if (sk && skinSel.querySelector(`option[value="${sk}"]`)) skinSel.value = sk; } catch (e) {}
+function applySkin() {
+  const [type, id] = kitSel.value.split(':');
+  const auto = type === 'drums' ? id : (document.body.dataset.kit || 'black-pearl');
+  if (type === 'drums') document.body.dataset.kit = id;
+  document.body.dataset.skin = skinSel.value === 'auto' ? auto : skinSel.value;
+}
+skinSel.addEventListener('change', () => {
+  try { localStorage.setItem('melasa-skin', skinSel.value); } catch (e) {}
+  applySkin();
+});
 function applyMode() {
+  applySkin();
   const piano = kitSel.value.startsWith('piano:');
   if (piano && editing) setEditing(false);
   document.body.classList.toggle('mode-piano', piano);
@@ -579,6 +639,7 @@ function setEditing(on) {
   document.getElementById('edit').hidden = on;
   document.getElementById('done').hidden = !on;
   document.getElementById('reset').hidden = !on;
+  skinSel.hidden = !on;
   hint.textContent = 'Drag pads to move. Drag the dot to resize.';
   hint.hidden = !on;
   if (!on) save();
