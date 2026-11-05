@@ -158,6 +158,41 @@
     background: var(--brass); color: #2a1d06; border: 0; border-radius: 6px; padding: 8px 14px; cursor: pointer;
   }
 
+  body.mode-piano #stage, body.mode-piano .drums-only { display: none; }
+  body:not(.mode-piano) .piano-only { display: none; }
+  .octave { display: inline-flex; align-items: center; gap: 4px; }
+  .range { font: 700 12px var(--font-label); letter-spacing: .08em; color: var(--ink-dim); min-width: 4.2em; text-align: center; font-variant-numeric: tabular-nums; }
+  .tools button[aria-pressed="true"] { background: var(--brass); color: #2a1d06; border-color: var(--brass); }
+  .tools { flex-wrap: wrap; align-items: center; right: max(12px, env(safe-area-inset-right, 0px)); pointer-events: none; }
+  .tools > * { pointer-events: auto; }
+
+  #piano {
+    position: fixed; inset: 0; display: flex;
+    padding-top: calc(28px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(var(--toolbar-h, 52px) + env(safe-area-inset-bottom, 0px));
+    padding-left: max(12px, env(safe-area-inset-left, 0px));
+    padding-right: max(12px, env(safe-area-inset-right, 0px));
+  }
+  .keys { position: relative; flex: 1; display: flex; touch-action: none; }
+  .white {
+    flex: 1; position: relative; margin: 0 1px;
+    background: linear-gradient(#f7f2e8, #e4dccd);
+    border-radius: 0 0 8px 8px;
+    box-shadow: inset 0 -6px 0 #cfc5b3, 0 4px 10px rgba(0,0,0,.4);
+    display: flex; align-items: flex-end; justify-content: center; padding-bottom: 14px;
+    font: 700 12px var(--font-label); letter-spacing: .08em; color: #8a7d6a;
+  }
+  .white.on { background: linear-gradient(#e9dfcc, #d6cab3); box-shadow: inset 0 -2px 0 #cfc5b3, 0 2px 4px rgba(0,0,0,.4); }
+  .black {
+    position: absolute; top: 0; height: 60%; z-index: 2;
+    transform: translateX(-50%);
+    background: linear-gradient(#3a332d, #0e0c0a 85%);
+    border-radius: 0 0 5px 5px;
+    box-shadow: inset 0 -5px 0 #2a2420, 0 4px 8px rgba(0,0,0,.5);
+  }
+  .black.on { background: linear-gradient(#2a241f, #4a3f33); box-shadow: inset 0 -1px 0 #2a2420; }
+  .white span, .black span { pointer-events: none; }
+
   #start {
     position: fixed; inset: 0;
     display: grid; place-items: center;
@@ -189,16 +224,32 @@
   <div class="pad drum kick" data-snd="kick" style="--lx:45;--ly:85;--ls:26;--px:32;--py:82;--ps:30"><span>Kick L</span></div>
   <div class="pad drum kick" data-snd="kick" style="--lx:61;--ly:85;--ls:26;--px:68;--py:82;--ps:30"><span>Kick R</span></div>
 </div>
+<div id="piano" hidden>
+  <div id="keys" class="keys" aria-label="Piano keyboard"></div>
+</div>
 <div class="brand">Melasa</div>
 <div class="tools">
-  <label class="sr" for="kit">Kit</label>
+  <label class="sr" for="kit">Instrument</label>
   <select id="kit">
-    <option value="black-pearl">Black Pearl</option>
-    <option value="red-zeppelin">Red Zeppelin</option>
-    <option value="tr-808">TR-808</option>
-    <option value="synth">Synth</option>
+    <optgroup label="Drums">
+      <option value="drums:black-pearl">Black Pearl</option>
+      <option value="drums:red-zeppelin">Red Zeppelin</option>
+      <option value="drums:tr-808">TR-808</option>
+      <option value="drums:synth">Synth</option>
+    </optgroup>
+    <optgroup label="Piano">
+      <option value="piano:grand">Grand</option>
+      <option value="piano:upright">Upright</option>
+      <option value="piano:honky">Honky-tonk</option>
+    </optgroup>
   </select>
-  <button id="edit" type="button">Layout</button>
+  <button id="edit" type="button" class="drums-only">Layout</button>
+  <span class="piano-only octave">
+    <button id="oct-down" type="button" aria-label="Octave down">−</button>
+    <span id="range" class="range">C3–C5</span>
+    <button id="oct-up" type="button" aria-label="Octave up">+</button>
+  </span>
+  <button id="sustain" type="button" class="piano-only" aria-pressed="false">Sustain</button>
   <button id="credits-btn" type="button">Credits</button>
   <button id="done" type="button" class="primary" hidden>Done</button>
   <button id="reset" type="button" hidden>Reset</button>
@@ -214,6 +265,10 @@
     <p><b>TR-808</b> kit: Roland TR-808 sample set by Michael Fischer (Technopolis, 1994), released free.
       Via <a href="https://github.com/danigb/samples" target="_blank" rel="noopener">github.com/danigb/samples</a>.</p>
     <p><b>Synth</b> kit: generated in the browser by Melasa.</p>
+    <p><b>Grand</b> piano: Splendid Grand Piano (Steinway), public domain.
+      <b>Upright</b> piano: Yamaha upright from the Versilian Community Sample Library (VCSL), CC0.
+      <b>Honky-tonk</b> piano: Old Piano (Francis Bacon) from FreePats, CC0.
+      All via <a href="https://github.com/danigb/samples" target="_blank" rel="noopener">github.com/danigb/samples</a>; one velocity layer, trimmed to MP3.</p>
     <button id="credits-close" type="button" class="primary">Close</button>
   </div>
 </div>
@@ -386,21 +441,94 @@ const Engine = (() => {
     if (name === 'hhopen') openHat = [g];
   }
 
-  return { init, play, setKit, isLoaded: id => !KITS[id].layers || !!cache[id] };
+  /* ---------- Pianos ---------- */
+  const PIANOS = {
+    grand:   [35, 38, 41, 45, 48, 50, 53, 57, 60, 62, 65, 69, 72, 74, 77, 81, 83, 87, 90, 93, 96],
+    upright: [36, 43, 48, 55, 60, 67, 72, 79, 84, 91, 96],
+    honky:   [36, 39, 41, 45, 48, 50, 54, 57, 60, 63, 65, 69, 72, 75, 78, 81, 84, 87, 90, 93, 96],
+  };
+  const pianoCache = {};
+  let pianoId = null, sustain = false;
+  const voices = new Map();   // midi -> { src, g }
+  const sustained = new Set();
+
+  async function setPiano(id) {
+    init();
+    pianoId = id;
+    if (pianoCache[id]) return;
+    const bank = {};
+    await Promise.all(PIANOS[id].map(async m => { bank[m] = await loadBuffer(`pianos/${id}/${m}.mp3`); }));
+    pianoCache[id] = bank;
+  }
+
+  function release(v, t) {
+    v.g.gain.cancelScheduledValues(t);
+    v.g.gain.setValueAtTime(v.g.gain.value, t);
+    v.g.gain.setTargetAtTime(0, t, 0.08);
+    v.src.stop(t + 0.6);
+  }
+
+  function noteOn(m, vel = 0.8) {
+    if (!ctx) init();
+    const bank = pianoCache[pianoId];
+    if (!bank) return;
+    const t = ctx.currentTime + 0.003;
+    if (voices.has(m)) { release(voices.get(m), t); voices.delete(m); }
+    sustained.delete(m);
+    const near = PIANOS[pianoId].reduce((a, b) => Math.abs(b - m) < Math.abs(a - m) ? b : a);
+    const src = ctx.createBufferSource();
+    src.buffer = bank[near];
+    src.playbackRate.value = Math.pow(2, (m - near) / 12);
+    const g = ctx.createGain();
+    g.gain.value = 0.25 + 0.75 * vel;
+    src.connect(g).connect(out);
+    src.start(t);
+    voices.set(m, { src, g });
+  }
+
+  function noteOff(m) {
+    if (!ctx || !voices.has(m)) return;
+    if (sustain) { sustained.add(m); return; }
+    release(voices.get(m), ctx.currentTime);
+    voices.delete(m);
+  }
+
+  function setSustain(on) {
+    sustain = on;
+    if (!on && ctx) {
+      sustained.forEach(m => { if (voices.has(m)) { release(voices.get(m), ctx.currentTime); voices.delete(m); } });
+      sustained.clear();
+    }
+  }
+
+  return {
+    init, play, setKit, setPiano, noteOn, noteOff, setSustain,
+    isLoaded: (type, id) => type === 'piano' ? !!pianoCache[id] : (!KITS[id].layers || !!cache[id]),
+  };
 })();
 
 /* ---------- Touch handling (multi-touch via pointer events) ---------- */
 const start = document.getElementById('start');
 const kitSel = document.getElementById('kit');
-try { const k = localStorage.getItem('melasa-kit'); if (k && kitSel.querySelector(`option[value="${k}"]`)) kitSel.value = k; } catch (e) {}
+try { const k = localStorage.getItem('melasa-instrument'); if (k && kitSel.querySelector(`option[value="${k}"]`)) kitSel.value = k; } catch (e) {}
 const hint = document.getElementById('hint');
+function applyMode() {
+  const piano = kitSel.value.startsWith('piano:');
+  if (piano && editing) setEditing(false);
+  document.body.classList.toggle('mode-piano', piano);
+  document.getElementById('piano').hidden = !piano;
+  if (piano) buildKeys();
+}
 async function chooseKit() {
-  const id = kitSel.value;
-  try { localStorage.setItem('melasa-kit', id); } catch (e) {}
+  const [type, id] = kitSel.value.split(':');
+  try { localStorage.setItem('melasa-instrument', kitSel.value); } catch (e) {}
+  applyMode();
   const label = kitSel.selectedOptions[0].textContent;
-  if (!Engine.isLoaded(id)) { hint.textContent = `Loading ${label}…`; hint.hidden = false; }
-  try { await Engine.setKit(id); if (!editing) hint.hidden = true; }
-  catch (err) { hint.textContent = `Couldn't load ${label}. Check your connection and pick it again.`; hint.hidden = false; }
+  if (!Engine.isLoaded(type, id)) { hint.textContent = `Loading ${label}…`; hint.hidden = false; }
+  try {
+    await (type === 'piano' ? Engine.setPiano(id) : Engine.setKit(id));
+    if (!editing) hint.hidden = true;
+  } catch (err) { hint.textContent = `Couldn't load ${label}. Check your connection and pick it again.`; hint.hidden = false; }
 }
 kitSel.addEventListener('change', chooseKit);
 const credits = document.getElementById('credits');
@@ -500,11 +628,109 @@ document.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('gesturestart', e => e.preventDefault());
 
 /* Keyboard for desktop testing */
+/* ---------- Piano keyboard ---------- */
+const keysEl = document.getElementById('keys');
+const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const isBlack = m => [1, 3, 6, 8, 10].includes(m % 12);
+let octave = 3;   // lowest C shown (C3 = MIDI 48)
+try { const o = +localStorage.getItem('melasa-octave'); if (o >= 2 && o <= 6) octave = o; } catch (e) {}
+const octavesShown = () => (innerWidth > innerHeight ? 2 : 1);
+
+function buildKeys() {
+  const n = octavesShown();
+  octave = clamp(octave, 2, 7 - n);
+  const lo = 12 * (octave + 1), hi = lo + 12 * n;
+  const whites = [];
+  for (let m = lo; m <= hi; m++) if (!isBlack(m)) whites.push(m);
+  keysEl.innerHTML = '';
+  whites.forEach(m => {
+    const k = document.createElement('div');
+    k.className = 'white'; k.dataset.midi = m;
+    if (m % 12 === 0) k.innerHTML = `<span>C${m / 12 - 1}</span>`;
+    keysEl.appendChild(k);
+  });
+  for (let m = lo; m <= hi; m++) {
+    if (!isBlack(m)) continue;
+    const after = whites.indexOf(m + 1);
+    const k = document.createElement('div');
+    k.className = 'black'; k.dataset.midi = m;
+    k.style.left = (after / whites.length * 100) + '%';
+    k.style.width = (0.6 / whites.length * 100) + '%';
+    keysEl.appendChild(k);
+  }
+  document.getElementById('range').textContent = `C${octave}–C${octave + n}`;
+  try { localStorage.setItem('melasa-octave', octave); } catch (e) {}
+  fitToolbar();
+}
+function fitToolbar() {
+  document.documentElement.style.setProperty('--toolbar-h', (document.querySelector('.tools').offsetHeight + 20) + 'px');
+}
+
+const held = new Map();   // pointerId -> midi
+function keyAt(x, y) {
+  const el = document.elementFromPoint(x, y);
+  return el && el.dataset && el.dataset.midi && keysEl.contains(el) ? el : null;
+}
+function press(pid, el, y) {
+  const m = +el.dataset.midi;
+  const r = el.getBoundingClientRect();
+  const vel = clamp(0.45 + 0.55 * (y - r.top) / r.height, 0.3, 1);   // play nearer the front edge for louder
+  held.set(pid, m);
+  el.classList.add('on');
+  Engine.noteOn(m, vel);
+}
+function lift(pid) {
+  if (!held.has(pid)) return;
+  const m = held.get(pid);
+  held.delete(pid);
+  if (![...held.values()].includes(m)) {
+    Engine.noteOff(m);
+    const el = keysEl.querySelector(`[data-midi="${m}"]`);
+    if (el) el.classList.remove('on');
+  }
+}
+keysEl.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  const el = keyAt(e.clientX, e.clientY);
+  if (el) press(e.pointerId, el, e.clientY);
+});
+keysEl.addEventListener('pointermove', e => {
+  if (!held.has(e.pointerId)) return;
+  const el = keyAt(e.clientX, e.clientY);
+  if (el && +el.dataset.midi !== held.get(e.pointerId)) { lift(e.pointerId); press(e.pointerId, el, e.clientY); }
+});
+['pointerup', 'pointercancel'].forEach(t => keysEl.addEventListener(t, e => lift(e.pointerId)));
+
+document.getElementById('oct-down').addEventListener('click', () => { octave--; buildKeys(); });
+document.getElementById('oct-up').addEventListener('click', () => { octave++; buildKeys(); });
+const sustainBtn = document.getElementById('sustain');
+sustainBtn.addEventListener('click', () => {
+  const on = sustainBtn.getAttribute('aria-pressed') !== 'true';
+  sustainBtn.setAttribute('aria-pressed', on);
+  Engine.setSustain(on);
+});
+let lastShown = octavesShown();
+addEventListener('resize', () => {
+  fitToolbar();
+  if (document.body.classList.contains('mode-piano') && octavesShown() !== lastShown) { lastShown = octavesShown(); buildKeys(); }
+});
+applyMode();
+
+/* Desktop keys: drums, or piano keys on the home row */
 const KEYS = { z: 'hhopen', a: 'hihat', s: 'snare', d: 'tom1', f: 'tom2', g: 'tom3', ' ': 'kick', q: 'crash', w: 'splash', e: 'ride' };
+const PIANO_KEYS = 'awsedftgyhujk';   // a = C, w = C#, s = D ... k = next C
 document.addEventListener('keydown', e => {
-  if (e.target.tagName === 'SELECT') return;
-  const snd = KEYS[e.key.toLowerCase()];
-  if (snd && !e.repeat) { Engine.init(); start.hidden = true; Engine.play(snd, 0.9); }
+  if (e.target.tagName === 'SELECT' || e.repeat) return;
+  const k = e.key.toLowerCase();
+  Engine.init(); start.hidden = true;
+  if (document.body.classList.contains('mode-piano')) {
+    const i = PIANO_KEYS.indexOf(k);
+    if (i >= 0) Engine.noteOn(12 * (octave + 1) + i, 0.8);
+  } else if (KEYS[k]) Engine.play(KEYS[k], 0.9);
+});
+document.addEventListener('keyup', e => {
+  const i = PIANO_KEYS.indexOf(e.key.toLowerCase());
+  if (i >= 0 && document.body.classList.contains('mode-piano')) Engine.noteOff(12 * (octave + 1) + i);
 });
 </script>
 <!--ARTIFACT-END-->
