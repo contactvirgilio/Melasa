@@ -6,6 +6,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#14110f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Melasa">
 <!--ARTIFACT-START-->
 <title>Melasa Drums</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -192,6 +197,7 @@
   }
   .credits-card h2 { margin: 0 0 8px; font: 700 18px var(--font-label); letter-spacing: .12em; text-transform: uppercase; }
   .credits-card a { color: var(--brass); }
+  .credits-card .version { color: var(--ink-dim); font-size: 13px; }
   .credits-card button {
     font: 700 13px var(--font-label); letter-spacing: .14em; text-transform: uppercase;
     background: var(--brass); color: #2a1d06; border: 0; border-radius: 6px; padding: 8px 14px; cursor: pointer;
@@ -350,6 +356,7 @@
       <b>Upright</b> piano: Yamaha upright from the Versilian Community Sample Library (VCSL), CC0.
       <b>Honky-tonk</b> piano: Old Piano (Francis Bacon) from FreePats, CC0.
       All via <a href="https://github.com/danigb/samples" target="_blank" rel="noopener">github.com/danigb/samples</a>; one velocity layer, trimmed to MP3.</p>
+    <p class="version">Melasa 0.1.0 alpha</p>
     <button id="credits-close" type="button" class="primary">Close</button>
   </div>
 </div>
@@ -837,5 +844,11 @@ document.addEventListener('keyup', e => {
 });
 </script>
 <!--ARTIFACT-END-->
+<script>
+  // Offline support when hosted (GitHub Pages etc.)
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+</script>
 </body>
 </html>

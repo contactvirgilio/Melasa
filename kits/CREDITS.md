@@ -1,6 +1,10 @@
 # Melasa
 
-Touch drums and piano for phone and tablet. Open `index.html` through a web server (or GitHub Pages); the sampled kits are loaded with `fetch`, so opening the file directly from disk only plays the Synth kit.
+Touch drums and piano for phone and tablet.
+
+**Android:** download the APK from the latest [release](https://github.com/contactvirgilio/Melasa/releases). Each `v*` tag builds a new APK with GitHub Actions (Capacitor wrapper, `.github/workflows/android.yml`).
+
+**Web:** serve the folder over HTTPS (e.g. GitHub Pages). It installs to the home screen and works offline. Opening `index.html` straight from disk only plays the Synth kit.
 
 - Kit: crash, splash, ride, hi-hat (open + closed, closed chokes open), 3 toms, snare, double kick
 - Kits: Black Pearl, Red Zeppelin (acoustic, 5 velocity layers), TR-808, Synth
