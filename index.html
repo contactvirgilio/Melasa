@@ -25,6 +25,7 @@
     --font-label: "Saira Condensed", "Arial Narrow", sans-serif;
     color-scheme: dark;
   }
+  [hidden] { display: none !important; }
   html, body { height: 100%; margin: 0; overflow: hidden; }
   body {
     background: radial-gradient(ellipse at 50% 60%, var(--stage-glow), var(--stage) 70%);
@@ -46,6 +47,7 @@
     pointer-events: none;
   }
 
+  @media (max-width: 480px) { .brand { display: none; } }
   .pad {
     position: absolute;
     left: calc(var(--lx) * 1%);
@@ -100,15 +102,15 @@
   /* Edit layout mode */
   .tools {
     position: fixed; z-index: 4;
-    top: calc(8px + env(safe-area-inset-top, 0px));
-    left: max(16px, env(safe-area-inset-left, 0px));
-    display: flex; gap: 8px;
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    left: max(12px, env(safe-area-inset-left, 0px));
+    display: flex; gap: 6px;
   }
   .tools button {
-    font: 700 13px var(--font-label); letter-spacing: .14em; text-transform: uppercase;
+    font: 700 12px var(--font-label); letter-spacing: .14em; text-transform: uppercase;
     color: var(--ink); background: rgba(255,255,255,.08);
     border: 1px solid rgba(255,255,255,.18); border-radius: 6px;
-    padding: 8px 12px; cursor: pointer;
+    padding: 6px 9px; cursor: pointer;
   }
   .tools button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
   .tools .primary { background: var(--brass); color: #2a1d06; border-color: var(--brass); }
@@ -124,9 +126,36 @@
   body.editing .grip { display: block; }
   .hint {
     position: fixed; z-index: 4; left: 50%; transform: translateX(-50%);
-    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    top: calc(10px + env(safe-area-inset-top, 0px)); white-space: nowrap;
     font-size: 13px; letter-spacing: .08em; color: var(--ink-dim);
     pointer-events: none;
+  }
+
+  .tools select {
+    font: 700 12px var(--font-label); letter-spacing: .08em; text-transform: uppercase;
+    color: var(--ink); background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.18); border-radius: 6px; padding: 5px 6px;
+  }
+  .tools select option { background: var(--stage); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  body.editing #kit, body.editing #credits-btn { display: none; }
+  .credits {
+    position: fixed; inset: 0; z-index: 6; display: grid; place-items: center;
+    background: rgba(20,17,15,.85);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .credits-card {
+    max-width: 34rem; max-height: 80vh; overflow: auto;
+    background: var(--stage-glow); border: 1px solid rgba(255,255,255,.12); border-radius: 10px;
+    padding: 18px 20px; font: 15px/1.5 system-ui, sans-serif; color: var(--ink);
+    -webkit-user-select: text; user-select: text;
+  }
+  .credits-card h2 { margin: 0 0 8px; font: 700 18px var(--font-label); letter-spacing: .12em; text-transform: uppercase; }
+  .credits-card a { color: var(--brass); }
+  .credits-card button {
+    font: 700 13px var(--font-label); letter-spacing: .14em; text-transform: uppercase;
+    background: var(--brass); color: #2a1d06; border: 0; border-radius: 6px; padding: 8px 14px; cursor: pointer;
   }
 
   #start {
@@ -162,11 +191,32 @@
 </div>
 <div class="brand">Melasa</div>
 <div class="tools">
-  <button id="edit" type="button">Edit layout</button>
+  <label class="sr" for="kit">Kit</label>
+  <select id="kit">
+    <option value="black-pearl">Black Pearl</option>
+    <option value="red-zeppelin">Red Zeppelin</option>
+    <option value="tr-808">TR-808</option>
+    <option value="synth">Synth</option>
+  </select>
+  <button id="edit" type="button">Layout</button>
+  <button id="credits-btn" type="button">Credits</button>
   <button id="done" type="button" class="primary" hidden>Done</button>
   <button id="reset" type="button" hidden>Reset</button>
 </div>
 <div class="hint" id="hint" hidden>Drag pads to move. Drag the dot to resize.</div>
+<div id="credits" class="credits" hidden>
+  <div class="credits-card" role="dialog" aria-labelledby="credits-title">
+    <h2 id="credits-title">Sample credits</h2>
+    <p><b>Black Pearl</b> and <b>Red Zeppelin</b> kits: AVL Drumkits by Glen MacArthur, licensed
+      <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener">CC BY-SA 3.0</a>.
+      Source: <a href="https://github.com/studiorack/avl-drumkits" target="_blank" rel="noopener">github.com/studiorack/avl-drumkits</a>
+      (originally bandshed.net/avldrumkits). Trimmed and converted to MP3 for Melasa.</p>
+    <p><b>TR-808</b> kit: Roland TR-808 sample set by Michael Fischer (Technopolis, 1994), released free.
+      Via <a href="https://github.com/danigb/samples" target="_blank" rel="noopener">github.com/danigb/samples</a>.</p>
+    <p><b>Synth</b> kit: generated in the browser by Melasa.</p>
+    <button id="credits-close" type="button" class="primary">Close</button>
+  </div>
+</div>
 <button id="start" type="button">Tap to play<small>Turn off silent mode for sound</small></button>
 
 <script>
@@ -283,18 +333,83 @@ const Engine = (() => {
     ride:   (v, t) => metal(v * 0.4, t, { decay: 1.3, bp: 6500, hp: 4500, base: 52, noiseAmt: 0.3 }),
   };
 
-  function play(name, v = 1) {
-    if (!ctx) init();
-    sounds[name](Math.max(0.05, Math.min(1, v)), ctx.currentTime + 0.005);
+  /* ---------- Sampled kits ---------- */
+  const PIECES = ['kick', 'snare', 'tom1', 'tom2', 'tom3', 'hihat', 'hhopen', 'crash', 'splash', 'ride'];
+  const KITS = {
+    'black-pearl':  { layers: 5 },
+    'red-zeppelin': { layers: 5 },
+    'tr-808':       { layers: 1 },
+    'synth':        { layers: 0 },
+  };
+  const cache = {};       // kitId -> { piece: [AudioBuffer per layer] }
+  let kitId = 'synth';
+
+  async function loadBuffer(url) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(url + ' ' + res.status);
+    const data = await res.arrayBuffer();
+    return await new Promise((ok, fail) => ctx.decodeAudioData(data, ok, fail));
   }
 
-  return { init, play };
+  async function setKit(id) {
+    init();
+    kitId = id;
+    const kit = KITS[id];
+    if (!kit || !kit.layers || cache[id]) return;
+    const bank = {};
+    await Promise.all(PIECES.map(async p => {
+      bank[p] = await Promise.all(Array.from({ length: kit.layers }, (_, i) => loadBuffer(`kits/${id}/${p}-${i + 1}.mp3`)));
+    }));
+    cache[id] = bank;
+  }
+
+  function playSample(buffers, name, v, t) {
+    const n = buffers.length;
+    const layer = Math.min(n - 1, Math.max(0, Math.ceil((v - 0.4) / 0.6 * n) - 1));
+    const src = ctx.createBufferSource();
+    src.buffer = buffers[layer];
+    const g = ctx.createGain();
+    g.gain.value = n > 1 ? 0.75 + 0.25 * v : v;   // layers carry the dynamics; gain fine-tunes
+    src.connect(g).connect(out);
+    src.start(t);
+    return g;
+  }
+
+  function play(name, v = 1) {
+    if (!ctx) init();
+    v = Math.max(0.05, Math.min(1, v));
+    const t = ctx.currentTime + 0.005;
+    const bank = cache[kitId];
+    if (!bank) return sounds[name](v, t);   // synth kit, or kit still loading
+    if (name === 'hihat' || name === 'hhopen') choke(t);
+    const g = playSample(bank[name], name, v, t);
+    if (name === 'hhopen') openHat = [g];
+  }
+
+  return { init, play, setKit, isLoaded: id => !KITS[id].layers || !!cache[id] };
 })();
 
 /* ---------- Touch handling (multi-touch via pointer events) ---------- */
 const start = document.getElementById('start');
-start.addEventListener('pointerdown', e => { e.preventDefault(); Engine.init(); start.hidden = true; });
-start.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { Engine.init(); start.hidden = true; } });
+const kitSel = document.getElementById('kit');
+try { const k = localStorage.getItem('melasa-kit'); if (k && kitSel.querySelector(`option[value="${k}"]`)) kitSel.value = k; } catch (e) {}
+const hint = document.getElementById('hint');
+async function chooseKit() {
+  const id = kitSel.value;
+  try { localStorage.setItem('melasa-kit', id); } catch (e) {}
+  const label = kitSel.selectedOptions[0].textContent;
+  if (!Engine.isLoaded(id)) { hint.textContent = `Loading ${label}…`; hint.hidden = false; }
+  try { await Engine.setKit(id); if (!editing) hint.hidden = true; }
+  catch (err) { hint.textContent = `Couldn't load ${label}. Check your connection and pick it again.`; hint.hidden = false; }
+}
+kitSel.addEventListener('change', chooseKit);
+const credits = document.getElementById('credits');
+document.getElementById('credits-btn').addEventListener('click', () => { credits.hidden = false; });
+document.getElementById('credits-close').addEventListener('click', () => { credits.hidden = true; });
+credits.addEventListener('pointerdown', e => { if (e.target === credits) credits.hidden = true; });
+
+start.addEventListener('pointerdown', e => { e.preventDefault(); Engine.init(); start.hidden = true; chooseKit(); });
+start.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { Engine.init(); start.hidden = true; chooseKit(); } });
 
 document.querySelectorAll('.pad').forEach(pad => {
   pad.addEventListener('pointerdown', e => {
@@ -305,7 +420,7 @@ document.querySelectorAll('.pad').forEach(pad => {
     const dx = e.clientX - (r.left + r.width / 2);
     const dy = e.clientY - (r.top + r.height / 2);
     const dist = Math.min(1, Math.hypot(dx, dy) / (r.width / 2));
-    Engine.play(pad.dataset.snd, 1 - dist * 0.45);
+    Engine.play(pad.dataset.snd, 1 - dist * 0.6);
     pad.classList.remove('hit'); void pad.offsetWidth; pad.classList.add('hit');
     clearTimeout(pad._t); pad._t = setTimeout(() => pad.classList.remove('hit'), 90);
   });
@@ -336,7 +451,8 @@ function setEditing(on) {
   document.getElementById('edit').hidden = on;
   document.getElementById('done').hidden = !on;
   document.getElementById('reset').hidden = !on;
-  document.getElementById('hint').hidden = !on;
+  hint.textContent = 'Drag pads to move. Drag the dot to resize.';
+  hint.hidden = !on;
   if (!on) save();
 }
 document.getElementById('edit').addEventListener('click', () => setEditing(true));
@@ -386,6 +502,7 @@ document.addEventListener('gesturestart', e => e.preventDefault());
 /* Keyboard for desktop testing */
 const KEYS = { z: 'hhopen', a: 'hihat', s: 'snare', d: 'tom1', f: 'tom2', g: 'tom3', ' ': 'kick', q: 'crash', w: 'splash', e: 'ride' };
 document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'SELECT') return;
   const snd = KEYS[e.key.toLowerCase()];
   if (snd && !e.repeat) { Engine.init(); start.hidden = true; Engine.play(snd, 0.9); }
 });
