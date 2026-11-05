@@ -6,7 +6,7 @@ Touch drums and piano for phone and tablet. Open `index.html` through a web serv
 - Kits: Black Pearl, Red Zeppelin (acoustic, 5 velocity layers), TR-808, Synth
 - Pianos (separate screen, pick from the same menu): Grand, Upright, Honky-tonk. 2 octaves in landscape, 1 in portrait, octave shift, sustain. Press nearer the front of a key for louder.
 - Multi-touch: hit the center for louder, the rim for softer
-- Each kit has its own skin; "Layout" also has a Skin menu to pick a different one (or "match kit")
+- Each kit and piano has its own skin (Auto). Pick a different one from the Skin menu (under "Layout" for drums, in the toolbar for piano)
 - Tap "Layout" to move and resize pads (saved per orientation on the device)
 - Desktop keys (piano): A W S E D F T G Y H U J K = one octave from C
 - Desktop keys (drums): Q crash, W splash, E ride, A closed hi-hat, Z open hi-hat, S snare, D/F/G toms, Space kick

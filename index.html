@@ -170,7 +170,7 @@
     pointer-events: none;
   }
 
-  .tools select, .tools #skin {
+  .tools select, .tools #skin, .tools #pskin {
     font: 700 12px var(--font-label); letter-spacing: .08em; text-transform: uppercase;
     color: var(--ink); background: rgba(255,255,255,.08);
     border: 1px solid rgba(255,255,255,.18); border-radius: 6px; padding: 5px 6px;
@@ -205,31 +205,58 @@
   .tools { flex-wrap: wrap; align-items: center; right: max(12px, env(safe-area-inset-right, 0px)); pointer-events: none; }
   .tools > * { pointer-events: auto; }
 
+  /* Piano skins: case, felt strip and key colors per piano */
+  body {
+    --case: linear-gradient(#1d1915, #120f0d);
+    --felt: #6b1a1f;
+    --w-top: #f7f2e8; --w-bot: #e4dccd; --w-lip: #cfc5b3; --w-on-top: #e9dfcc; --w-on-bot: #d6cab3; --w-ink: #8a7d6a;
+    --b-top: #3a332d; --b-bot: #0e0c0a; --b-lip: #2a2420; --b-on: #4a3f33;
+  }
+  body[data-pskin="grand"] {
+    --case: linear-gradient(160deg, #26272b 0%, #0a0a0b 45%, #18191c 100%);
+    --felt: #6e1420;
+    --w-top: #fdfcf9; --w-bot: #ebe9e3; --w-lip: #d4d1c9; --w-on-top: #e8e5dd; --w-on-bot: #d5d1c6; --w-ink: #8d8a84;
+    --b-top: #2c2c2f; --b-bot: #050506; --b-lip: #1a1a1c; --b-on: #3d3d42;
+  }
+  body[data-pskin="upright"] {
+    --case: repeating-linear-gradient(92deg, rgba(0,0,0,.06) 0 3px, transparent 3px 11px), linear-gradient(#5b3b22, #3b2413);
+    --felt: #24402f;
+    --w-top: #f3ead6; --w-bot: #e0d2b4; --w-lip: #c8b791; --w-on-top: #e3d6b9; --w-on-bot: #cdbd99; --w-ink: #8a7656;
+    --b-top: #33271e; --b-bot: #140e0a; --b-lip: #241a13; --b-on: #4a3a2c;
+  }
+  body[data-pskin="honky"] {
+    --case: repeating-linear-gradient(90deg, rgba(0,0,0,.07) 0 2px, transparent 2px 9px), linear-gradient(#8a5524, #4f2d10);
+    --felt: #9b2a1a;
+    --w-top: #eedfb6; --w-bot: #d7c08c; --w-lip: #bfa46b; --w-on-top: #dccaa0; --w-on-bot: #c4ab76; --w-ink: #7a5f34;
+    --b-top: #40342a; --b-bot: #1a1410; --b-lip: #2c231b; --b-on: #5a4a3a;
+  }
+
   #piano {
     position: fixed; inset: 0; display: flex;
+    background: var(--case);
     padding-top: calc(28px + env(safe-area-inset-top, 0px));
     padding-bottom: calc(var(--toolbar-h, 52px) + env(safe-area-inset-bottom, 0px));
     padding-left: max(12px, env(safe-area-inset-left, 0px));
     padding-right: max(12px, env(safe-area-inset-right, 0px));
   }
-  .keys { position: relative; flex: 1; display: flex; touch-action: none; }
+  .keys { position: relative; flex: 1; display: flex; touch-action: none; border-top: 6px solid var(--felt); }
   .white {
     flex: 1; position: relative; margin: 0 1px;
-    background: linear-gradient(#f7f2e8, #e4dccd);
+    background: linear-gradient(var(--w-top), var(--w-bot));
     border-radius: 0 0 8px 8px;
-    box-shadow: inset 0 -6px 0 #cfc5b3, 0 4px 10px rgba(0,0,0,.4);
+    box-shadow: inset 0 -6px 0 var(--w-lip), 0 4px 10px rgba(0,0,0,.4);
     display: flex; align-items: flex-end; justify-content: center; padding-bottom: 14px;
-    font: 700 12px var(--font-label); letter-spacing: .08em; color: #8a7d6a;
+    font: 700 12px var(--font-label); letter-spacing: .08em; color: var(--w-ink);
   }
-  .white.on { background: linear-gradient(#e9dfcc, #d6cab3); box-shadow: inset 0 -2px 0 #cfc5b3, 0 2px 4px rgba(0,0,0,.4); }
+  .white.on { background: linear-gradient(var(--w-on-top), var(--w-on-bot)); box-shadow: inset 0 -2px 0 var(--w-lip), 0 2px 4px rgba(0,0,0,.4); }
   .black {
     position: absolute; top: 0; height: 60%; z-index: 2;
     transform: translateX(-50%);
-    background: linear-gradient(#3a332d, #0e0c0a 85%);
+    background: linear-gradient(var(--b-top), var(--b-bot) 85%);
     border-radius: 0 0 5px 5px;
-    box-shadow: inset 0 -5px 0 #2a2420, 0 4px 8px rgba(0,0,0,.5);
+    box-shadow: inset 0 -5px 0 var(--b-lip), 0 4px 8px rgba(0,0,0,.5);
   }
-  .black.on { background: linear-gradient(#2a241f, #4a3f33); box-shadow: inset 0 -1px 0 #2a2420; }
+  .black.on { background: linear-gradient(var(--b-lip), var(--b-on)); box-shadow: inset 0 -1px 0 var(--b-lip); }
   .white span, .black span { pointer-events: none; }
 
   #start {
@@ -289,10 +316,17 @@
     <button id="oct-up" type="button" aria-label="Octave up">+</button>
   </span>
   <button id="sustain" type="button" class="piano-only" aria-pressed="false">Sustain</button>
+  <label class="sr" for="pskin">Piano skin</label>
+  <select id="pskin" class="piano-only">
+    <option value="auto">Skin: Auto</option>
+    <option value="grand">Skin: Grand</option>
+    <option value="upright">Skin: Upright</option>
+    <option value="honky">Skin: Honky-tonk</option>
+  </select>
   <button id="credits-btn" type="button">Credits</button>
   <label class="sr" for="skin">Skin</label>
   <select id="skin" hidden>
-    <option value="auto">Skin: match kit</option>
+    <option value="auto">Skin: Auto</option>
     <option value="black-pearl">Skin: Black Pearl</option>
     <option value="red-zeppelin">Skin: Red Zeppelin</option>
     <option value="tr-808">Skin: TR-808</option>
@@ -561,8 +595,16 @@ try { const k = localStorage.getItem('melasa-instrument'); if (k && kitSel.query
 const hint = document.getElementById('hint');
 const skinSel = document.getElementById('skin');
 try { const sk = localStorage.getItem('melasa-skin'); if (sk && skinSel.querySelector(`option[value="${sk}"]`)) skinSel.value = sk; } catch (e) {}
+const pskinSel = document.getElementById('pskin');
+try { const ps = localStorage.getItem('melasa-pskin'); if (ps && pskinSel.querySelector(`option[value="${ps}"]`)) pskinSel.value = ps; } catch (e) {}
+pskinSel.addEventListener('change', () => {
+  try { localStorage.setItem('melasa-pskin', pskinSel.value); } catch (e) {}
+  applySkin();
+});
 function applySkin() {
   const [type, id] = kitSel.value.split(':');
+  if (type === 'piano') document.body.dataset.piano = id;
+  document.body.dataset.pskin = pskinSel.value === 'auto' ? (document.body.dataset.piano || 'grand') : pskinSel.value;
   const auto = type === 'drums' ? id : (document.body.dataset.kit || 'black-pearl');
   if (type === 'drums') document.body.dataset.kit = id;
   document.body.dataset.skin = skinSel.value === 'auto' ? auto : skinSel.value;
