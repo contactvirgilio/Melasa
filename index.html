@@ -97,6 +97,38 @@
   .pad.hit { transform: translate(-50%, -50%) scale(.94); filter: brightness(1.25); transition: none; }
   .cym.hit { transform: translate(-50%, -50%) scale(.96) rotate(4deg); }
 
+  /* Edit layout mode */
+  .tools {
+    position: fixed; z-index: 4;
+    top: calc(8px + env(safe-area-inset-top, 0px));
+    left: max(16px, env(safe-area-inset-left, 0px));
+    display: flex; gap: 8px;
+  }
+  .tools button {
+    font: 700 13px var(--font-label); letter-spacing: .14em; text-transform: uppercase;
+    color: var(--ink); background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.18); border-radius: 6px;
+    padding: 8px 12px; cursor: pointer;
+  }
+  .tools button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+  .tools .primary { background: var(--brass); color: #2a1d06; border-color: var(--brass); }
+  body.editing .pad { outline: 2px dashed rgba(243,236,224,.55); outline-offset: 4px; cursor: grab; }
+  body.editing .pad.dragging { cursor: grabbing; filter: brightness(1.15); z-index: 2; }
+  .grip {
+    display: none;
+    position: absolute; right: 2%; bottom: 2%;
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--ink); border: 3px solid var(--stage);
+    cursor: nwse-resize; touch-action: none;
+  }
+  body.editing .grip { display: block; }
+  .hint {
+    position: fixed; z-index: 4; left: 50%; transform: translateX(-50%);
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    font-size: 13px; letter-spacing: .08em; color: var(--ink-dim);
+    pointer-events: none;
+  }
+
   #start {
     position: fixed; inset: 0;
     display: grid; place-items: center;
@@ -129,6 +161,12 @@
   <div class="pad drum kick" data-snd="kick" style="--lx:61;--ly:85;--ls:26;--px:68;--py:82;--ps:30"><span>Kick R</span></div>
 </div>
 <div class="brand">Melasa</div>
+<div class="tools">
+  <button id="edit" type="button">Edit layout</button>
+  <button id="done" type="button" class="primary" hidden>Done</button>
+  <button id="reset" type="button" hidden>Reset</button>
+</div>
+<div class="hint" id="hint" hidden>Drag pads to move. Drag the dot to resize.</div>
 <button id="start" type="button">Tap to play<small>Turn off silent mode for sound</small></button>
 
 <script>
@@ -261,6 +299,7 @@ start.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ')
 document.querySelectorAll('.pad').forEach(pad => {
   pad.addEventListener('pointerdown', e => {
     e.preventDefault();
+    if (editing) return;
     // Velocity: center hits are louder, rim hits softer
     const r = pad.getBoundingClientRect();
     const dx = e.clientX - (r.left + r.width / 2);
@@ -271,6 +310,76 @@ document.querySelectorAll('.pad').forEach(pad => {
     clearTimeout(pad._t); pad._t = setTimeout(() => pad.classList.remove('hit'), 90);
   });
 });
+/* ---------- Adjustable layout (saved per orientation on this device) ---------- */
+const pads = [...document.querySelectorAll('.pad')];
+const STORE = 'melasa-layout-v1';
+const VARS = ['lx', 'ly', 'ls', 'px', 'py', 'ps'];
+const defaults = pads.map(p => Object.fromEntries(VARS.map(k => [k, +p.style.getPropertyValue('--' + k)])));
+let editing = false;
+
+function applyLayout(layout) {
+  pads.forEach((p, i) => VARS.forEach(k => { if (layout[i] && layout[i][k] != null) p.style.setProperty('--' + k, layout[i][k]); }));
+}
+function currentLayout() {
+  return pads.map(p => Object.fromEntries(VARS.map(k => [k, +p.style.getPropertyValue('--' + k)])));
+}
+function save() { try { localStorage.setItem(STORE, JSON.stringify(currentLayout())); } catch (e) {} }
+try { const saved = JSON.parse(localStorage.getItem(STORE)); if (Array.isArray(saved)) applyLayout(saved); } catch (e) {}
+
+const isPortrait = () => matchMedia('(orientation: portrait)').matches;
+const keys = () => isPortrait() ? ['px', 'py', 'ps'] : ['lx', 'ly', 'ls'];
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function setEditing(on) {
+  editing = on;
+  document.body.classList.toggle('editing', on);
+  document.getElementById('edit').hidden = on;
+  document.getElementById('done').hidden = !on;
+  document.getElementById('reset').hidden = !on;
+  document.getElementById('hint').hidden = !on;
+  if (!on) save();
+}
+document.getElementById('edit').addEventListener('click', () => setEditing(true));
+document.getElementById('done').addEventListener('click', () => setEditing(false));
+document.getElementById('reset').addEventListener('click', () => {
+  applyLayout(defaults);
+  try { localStorage.removeItem(STORE); } catch (e) {}
+});
+
+pads.forEach(pad => {
+  const grip = document.createElement('div');
+  grip.className = 'grip';
+  pad.appendChild(grip);
+
+  let mode = null, offX = 0, offY = 0;
+  pad.addEventListener('pointerdown', e => {
+    if (!editing) return;
+    pad.setPointerCapture(e.pointerId);
+    const r = pad.getBoundingClientRect();
+    mode = e.target === grip ? 'resize' : 'move';
+    offX = e.clientX - (r.left + r.width / 2);
+    offY = e.clientY - (r.top + r.height / 2);
+    pad.classList.add('dragging');
+  });
+  pad.addEventListener('pointermove', e => {
+    if (!mode) return;
+    const [kx, ky, ks] = keys();
+    const W = innerWidth, H = innerHeight, vmin = Math.min(W, H) / 100;
+    if (mode === 'move') {
+      pad.style.setProperty('--' + kx, clamp((e.clientX - offX) / W * 100, 0, 100).toFixed(1));
+      pad.style.setProperty('--' + ky, clamp((e.clientY - offY) / H * 100, 0, 100).toFixed(1));
+    } else {
+      const r = pad.getBoundingClientRect();
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const d = Math.hypot(e.clientX - cx, e.clientY - cy) * 2 / Math.SQRT2 * 1.0;
+      pad.style.setProperty('--' + ks, clamp(d / vmin, 12, 70).toFixed(1));
+    }
+  });
+  const end = () => { if (mode) { mode = null; pad.classList.remove('dragging'); save(); } };
+  pad.addEventListener('pointerup', end);
+  pad.addEventListener('pointercancel', end);
+});
+
 document.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('gesturestart', e => e.preventDefault());
 
