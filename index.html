@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#14110f">
+<!--ARTIFACT-START-->
+<title>Melasa Drums</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;700&display=swap">
+<style>
+  /* Layout: full-screen stage, pads placed like a kit seen from the throne (landscape + portrait maps). */
+  :root {
+    --stage: #14110f;
+    --stage-glow: #2a221c;
+    --head: #ece6da;
+    --head-edge: #c9bfae;
+    --hoop: #8a2b22;
+    --brass: #c99a3e;
+    --brass-dark: #7a5a1c;
+    --ink: #f3ece0;
+    --ink-dim: #9c8f7d;
+    --font-label: "Saira Condensed", "Arial Narrow", sans-serif;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; margin: 0; overflow: hidden; }
+  body {
+    background: radial-gradient(ellipse at 50% 60%, var(--stage-glow), var(--stage) 70%);
+    background-color: var(--stage);
+    color: var(--ink);
+    font-family: var(--font-label);
+    -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none;
+    touch-action: none;
+  }
+  #stage { position: fixed; inset: 0; }
+
+  .brand {
+    position: fixed;
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    right: max(16px, env(safe-area-inset-right, 0px));
+    font-size: 13px; letter-spacing: .2em; text-transform: uppercase;
+    color: var(--ink-dim);
+    pointer-events: none;
+  }
+
+  .pad {
+    position: absolute;
+    left: calc(var(--lx) * 1%);
+    top: calc(var(--ly) * 1%);
+    width: calc(var(--ls) * 1vmin);
+    aspect-ratio: 1;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    display: grid; place-items: center;
+    cursor: pointer;
+    touch-action: none;
+    transition: transform 90ms ease-out, filter 90ms ease-out;
+  }
+  @media (orientation: portrait) {
+    .pad {
+      left: calc(var(--px) * 1%);
+      top: calc(var(--py) * 1%);
+      width: calc(var(--ps) * 1vmin);
+    }
+  }
+  .pad span {
+    font-size: clamp(11px, 2.4vmin, 16px);
+    font-weight: 700;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+
+  /* Drum heads: coated head, colored hoop */
+  .drum {
+    background: radial-gradient(circle at 45% 40%, var(--head) 0 55%, var(--head-edge) 70%);
+    box-shadow: 0 0 0 calc(var(--ls) * .045vmin) var(--hoop), 0 8px 18px rgba(0,0,0,.55);
+  }
+  .drum span { color: #4a3f33; }
+  .kick { --hoop: #3b4a5a; }
+  .kick { background: radial-gradient(circle at 45% 40%, #2b2622 0 50%, #1b1714 72%); }
+  .kick span { color: var(--ink-dim); }
+
+  /* Cymbals: brass with lathe grooves and a bell */
+  .cym {
+    background:
+      radial-gradient(circle, var(--brass) 0 9%, var(--brass-dark) 10% 11%, transparent 12%),
+      repeating-radial-gradient(circle, rgba(255,240,200,.08) 0 2px, rgba(0,0,0,.08) 2px 4px),
+      radial-gradient(circle at 40% 35%, #e6c374, var(--brass) 45%, var(--brass-dark));
+    box-shadow: 0 8px 20px rgba(0,0,0,.55);
+  }
+  .cym span { color: #3a2a0c; transform: translateY(calc(var(--ls) * .22vmin)); }
+
+  .pad.hit { transform: translate(-50%, -50%) scale(.94); filter: brightness(1.25); transition: none; }
+  .cym.hit { transform: translate(-50%, -50%) scale(.96) rotate(4deg); }
+
+  #start {
+    position: fixed; inset: 0;
+    display: grid; place-items: center;
+    background: rgba(20,17,15,.82);
+    z-index: 5;
+    border: 0; width: 100%;
+    color: var(--ink);
+    font: 700 clamp(20px, 5vmin, 34px) var(--font-label);
+    letter-spacing: .2em; text-transform: uppercase;
+    cursor: pointer;
+  }
+  #start small { display: block; margin-top: 8px; font-size: 13px; font-weight: 500; color: var(--ink-dim); letter-spacing: .1em; }
+  #start:focus-visible { outline: 2px solid var(--brass); outline-offset: -6px; }
+  @media (prefers-reduced-motion: reduce) { .pad, .pad.hit { transition: none; } .cym.hit { transform: translate(-50%, -50%) scale(.96); } }
+</style>
+</head>
+<body>
+<div id="stage">
+  <!-- data: id, label, class, landscape x/y/size, portrait x/y/size -->
+  <div class="pad cym"  data-snd="crash"  style="--lx:20;--ly:22;--ls:34;--px:25;--py:12;--ps:36"><span>Crash</span></div>
+  <div class="pad cym"  data-snd="splash" style="--lx:43;--ly:13;--ls:22;--px:50;--py:27;--ps:22"><span>Splash</span></div>
+  <div class="pad cym"  data-snd="ride"   style="--lx:80;--ly:22;--ls:38;--px:74;--py:14;--ps:40"><span>Ride</span></div>
+  <div class="pad cym"  data-snd="hihat"  style="--lx:8;--ly:52;--ls:26;--px:17;--py:40;--ps:28"><span>Hi-hat</span></div>
+  <div class="pad drum" data-snd="tom1"   style="--lx:40;--ly:42;--ls:24;--px:45;--py:45;--ps:26"><span>Tom 1</span></div>
+  <div class="pad drum" data-snd="tom2"   style="--lx:58;--ly:40;--ls:24;--px:72;--py:42;--ps:26"><span>Tom 2</span></div>
+  <div class="pad drum" data-snd="tom3"   style="--lx:77;--ly:70;--ls:32;--px:74;--py:62;--ps:34"><span>Floor</span></div>
+  <div class="pad drum" data-snd="snare"  style="--lx:26;--ly:68;--ls:30;--px:28;--py:60;--ps:32"><span>Snare</span></div>
+  <div class="pad drum kick" data-snd="kick" style="--lx:45;--ly:85;--ls:26;--px:32;--py:82;--ps:30"><span>Kick L</span></div>
+  <div class="pad drum kick" data-snd="kick" style="--lx:61;--ly:85;--ls:26;--px:68;--py:82;--ps:30"><span>Kick R</span></div>
+</div>
+<div class="brand">Melasa</div>
+<button id="start" type="button">Tap to play<small>Turn off silent mode for sound</small></button>
+
+<script>
+/* ---------- Audio engine (synthesized, no samples) ---------- */
+const Engine = (() => {
+  let ctx, out, noiseBuf;
+
+  function init() {
+    if (ctx) { if (ctx.state !== 'running') ctx.resume(); return; }
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+    ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -10; comp.ratio.value = 4;
+    out = ctx.createGain(); out.gain.value = 0.9;
+    out.connect(comp).connect(ctx.destination);
+    noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+
+  function env(peak, t, decay, attack = 0.001) {
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(peak, t + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + attack + decay);
+    g.connect(out);
+    return g;
+  }
+
+  function noise(t, dur, dest) {
+    const s = ctx.createBufferSource();
+    s.buffer = noiseBuf;
+    s.connect(dest);
+    s.start(t, Math.random() * 1.5);
+    s.stop(t + dur);
+  }
+
+  function filter(type, freq, q = 1) {
+    const f = ctx.createBiquadFilter();
+    f.type = type; f.frequency.value = freq; f.Q.value = q;
+    return f;
+  }
+
+  function kick(v, t) {
+    const o = ctx.createOscillator();
+    o.frequency.setValueAtTime(160, t);
+    o.frequency.exponentialRampToValueAtTime(45, t + 0.12);
+    o.connect(env(v, t, 0.45));
+    o.start(t); o.stop(t + 0.5);
+    const lp = filter('lowpass', 3000); lp.connect(env(v * 0.4, t, 0.012));
+    noise(t, 0.02, lp);
+  }
+
+  function snare(v, t) {
+    const o = ctx.createOscillator(); o.type = 'triangle';
+    o.frequency.setValueAtTime(220, t);
+    o.frequency.exponentialRampToValueAtTime(170, t + 0.05);
+    o.connect(env(v * 0.6, t, 0.1));
+    o.start(t); o.stop(t + 0.15);
+    const hp = filter('highpass', 1400); hp.connect(env(v * 0.9, t, 0.2));
+    noise(t, 0.25, hp);
+  }
+
+  function tom(f, v, t) {
+    const o = ctx.createOscillator();
+    o.frequency.setValueAtTime(f * 1.6, t);
+    o.frequency.exponentialRampToValueAtTime(f, t + 0.06);
+    const decay = 0.35 + 30 / f;
+    o.connect(env(v, t, decay));
+    o.start(t); o.stop(t + decay + 0.05);
+    const lp = filter('lowpass', f * 8); lp.connect(env(v * 0.25, t, 0.05));
+    noise(t, 0.06, lp);
+  }
+
+  // 808-style metal: stacked square waves at inharmonic ratios
+  const RATIOS = [2, 3, 4.16, 5.43, 6.79, 8.21];
+  function metal(v, t, { decay, bp, hp = 7000, base = 40, noiseAmt = 0, attack = 0.001 }) {
+    const band = filter('bandpass', bp, 0.8);
+    const high = filter('highpass', hp);
+    band.connect(high); high.connect(env(v, t, decay, attack));
+    RATIOS.forEach(r => {
+      const o = ctx.createOscillator(); o.type = 'square';
+      o.frequency.value = base * r;
+      o.connect(band);
+      o.start(t); o.stop(t + attack + decay + 0.05);
+    });
+    if (noiseAmt) {
+      const nh = filter('highpass', hp - 1500);
+      nh.connect(env(v * noiseAmt, t, decay * 0.8, attack));
+      noise(t, decay + 0.1, nh);
+    }
+  }
+
+  const sounds = {
+    kick:   (v, t) => kick(v, t),
+    snare:  (v, t) => snare(v, t),
+    tom1:   (v, t) => tom(200, v, t),
+    tom2:   (v, t) => tom(150, v, t),
+    tom3:   (v, t) => tom(95, v, t),
+    hihat:  (v, t) => metal(v * 0.5, t, { decay: 0.06, bp: 10000 }),
+    splash: (v, t) => metal(v * 0.45, t, { decay: 0.6, bp: 9000, noiseAmt: 0.8 }),
+    crash:  (v, t) => metal(v * 0.5, t, { decay: 1.8, bp: 8000, hp: 6000, noiseAmt: 1.2, attack: 0.004 }),
+    ride:   (v, t) => metal(v * 0.4, t, { decay: 1.3, bp: 6500, hp: 4500, base: 52, noiseAmt: 0.3 }),
+  };
+
+  function play(name, v = 1) {
+    if (!ctx) init();
+    sounds[name](Math.max(0.05, Math.min(1, v)), ctx.currentTime + 0.005);
+  }
+
+  return { init, play };
+})();
+
+/* ---------- Touch handling (multi-touch via pointer events) ---------- */
+const start = document.getElementById('start');
+start.addEventListener('pointerdown', e => { e.preventDefault(); Engine.init(); start.hidden = true; });
+start.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { Engine.init(); start.hidden = true; } });
+
+document.querySelectorAll('.pad').forEach(pad => {
+  pad.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    // Velocity: center hits are louder, rim hits softer
+    const r = pad.getBoundingClientRect();
+    const dx = e.clientX - (r.left + r.width / 2);
+    const dy = e.clientY - (r.top + r.height / 2);
+    const dist = Math.min(1, Math.hypot(dx, dy) / (r.width / 2));
+    Engine.play(pad.dataset.snd, 1 - dist * 0.45);
+    pad.classList.remove('hit'); void pad.offsetWidth; pad.classList.add('hit');
+    clearTimeout(pad._t); pad._t = setTimeout(() => pad.classList.remove('hit'), 90);
+  });
+});
+document.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('gesturestart', e => e.preventDefault());
+
+/* Keyboard for desktop testing */
+const KEYS = { a: 'hihat', s: 'snare', d: 'tom1', f: 'tom2', g: 'tom3', ' ': 'kick', q: 'crash', w: 'splash', e: 'ride' };
+document.addEventListener('keydown', e => {
+  const snd = KEYS[e.key.toLowerCase()];
+  if (snd && !e.repeat) { Engine.init(); start.hidden = true; Engine.play(snd, 0.9); }
+});
+</script>
+<!--ARTIFACT-END-->
+</body>
+</html>
