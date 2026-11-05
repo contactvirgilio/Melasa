@@ -1,5 +1,5 @@
 // Melasa service worker: caches the app and every sample so it plays offline.
-const VERSION = 'melasa-0.1.0-alpha';
+const VERSION = 'melasa-0.1.1-alpha';
 const FILES = [
   './',
   'index.html',

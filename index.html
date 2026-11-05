@@ -356,7 +356,7 @@
       <b>Upright</b> piano: Yamaha upright from the Versilian Community Sample Library (VCSL), CC0.
       <b>Honky-tonk</b> piano: Old Piano (Francis Bacon) from FreePats, CC0.
       All via <a href="https://github.com/danigb/samples" target="_blank" rel="noopener">github.com/danigb/samples</a>; one velocity layer, trimmed to MP3.</p>
-    <p class="version">Melasa 0.1.0 alpha</p>
+    <p class="version">Melasa 0.1.1 alpha · <span id="lat"></span></p>
     <button id="credits-close" type="button" class="primary">Close</button>
   </div>
 </div>
@@ -371,10 +371,14 @@ const Engine = (() => {
     if (ctx) { if (ctx.state !== 'running') ctx.resume(); return; }
     try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
     ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
-    const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -10; comp.ratio.value = 4;
-    out = ctx.createGain(); out.gain.value = 0.9;
-    out.connect(comp).connect(ctx.destination);
+    // Soft clipper instead of a compressor: a compressor adds ~6 ms lookahead delay
+    const clip = ctx.createWaveShaper();
+    const curve = new Float32Array(2048);
+    for (let i = 0; i < curve.length; i++) curve[i] = Math.tanh((i / (curve.length - 1)) * 2 - 1) / Math.tanh(1);
+    clip.curve = curve; clip.oversample = 'none';
+    out = ctx.createGain(); out.gain.value = 0.8;
+    out.connect(clip).connect(ctx.destination);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && ctx.state !== 'running') ctx.resume(); });
     noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
@@ -491,7 +495,13 @@ const Engine = (() => {
     const res = await fetch(url);
     if (!res.ok) throw new Error(url + ' ' + res.status);
     const data = await res.arrayBuffer();
-    return await new Promise((ok, fail) => ctx.decodeAudioData(data, ok, fail));
+    const buf = await new Promise((ok, fail) => ctx.decodeAudioData(data, ok, fail));
+    // Skip any silence before the attack (some decoders add padding)
+    const d = buf.getChannelData(0);
+    let peak = 0; for (let i = 0; i < Math.min(d.length, 4800); i++) peak = Math.max(peak, Math.abs(d[i]));
+    let i = 0; while (i < d.length && Math.abs(d[i]) < peak * 0.01) i++;
+    buf.startOffset = Math.max(0, (i - 24) / buf.sampleRate);
+    return buf;
   }
 
   async function setKit(id) {
@@ -514,17 +524,17 @@ const Engine = (() => {
     const g = ctx.createGain();
     g.gain.value = n > 1 ? 0.75 + 0.25 * v : v;   // layers carry the dynamics; gain fine-tunes
     src.connect(g).connect(out);
-    src.start(t);
+    src.start(t, src.buffer.startOffset || 0);
     return g;
   }
 
   function play(name, v = 1) {
     if (!ctx) init();
     v = Math.max(0.05, Math.min(1, v));
-    const t = ctx.currentTime + 0.005;
+    const t = 0;   // 0 = as soon as possible
     const bank = cache[kitId];
-    if (!bank) return sounds[name](v, t);   // synth kit, or kit still loading
-    if (name === 'hihat' || name === 'hhopen') choke(t);
+    if (!bank) return sounds[name](v, ctx.currentTime);   // synth kit, or kit still loading
+    if (name === 'hihat' || name === 'hhopen') choke(ctx.currentTime);
     const g = playSample(bank[name], name, v, t);
     if (name === 'hhopen') openHat = [g];
   }
@@ -560,7 +570,7 @@ const Engine = (() => {
     if (!ctx) init();
     const bank = pianoCache[pianoId];
     if (!bank) return;
-    const t = ctx.currentTime + 0.003;
+    const t = ctx.currentTime;
     if (voices.has(m)) { release(voices.get(m), t); voices.delete(m); }
     sustained.delete(m);
     const near = PIANOS[pianoId].reduce((a, b) => Math.abs(b - m) < Math.abs(a - m) ? b : a);
@@ -570,7 +580,7 @@ const Engine = (() => {
     const g = ctx.createGain();
     g.gain.value = 0.25 + 0.75 * vel;
     src.connect(g).connect(out);
-    src.start(t);
+    src.start(t, src.buffer.startOffset || 0);
     voices.set(m, { src, g });
   }
 
@@ -589,8 +599,10 @@ const Engine = (() => {
     }
   }
 
+  const latency = () => ctx ? Math.round(((ctx.baseLatency || 0) + (ctx.outputLatency || 0)) * 1000) : null;
+
   return {
-    init, play, setKit, setPiano, noteOn, noteOff, setSustain,
+    init, play, latency, setKit, setPiano, noteOn, noteOff, setSustain,
     isLoaded: (type, id) => type === 'piano' ? !!pianoCache[id] : (!KITS[id].layers || !!cache[id]),
   };
 })();
@@ -641,7 +653,11 @@ async function chooseKit() {
 }
 kitSel.addEventListener('change', chooseKit);
 const credits = document.getElementById('credits');
-document.getElementById('credits-btn').addEventListener('click', () => { credits.hidden = false; });
+document.getElementById('credits-btn').addEventListener('click', () => {
+  const ms = Engine.latency();
+  document.getElementById('lat').textContent = ms ? `audio delay on this device: ${ms} ms` : '';
+  credits.hidden = false;
+});
 document.getElementById('credits-close').addEventListener('click', () => { credits.hidden = true; });
 credits.addEventListener('pointerdown', e => { if (e.target === credits) credits.hidden = true; });
 
