@@ -32,6 +32,9 @@ jobs:
       - name: Create Android project
         run: npx cap add android && npx cap sync android
 
+      - name: Add native sound engine
+        run: bash android-native/apply.sh
+
       - name: App icon, version, fullscreen
         run: |
           RES=android/app/src/main/res
@@ -50,6 +53,20 @@ jobs:
 
       - name: Build APK
         run: cd android && ./gradlew assembleDebug --no-daemon
+
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Smoke test on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          script: bash android-native/smoke.sh
 
       - name: Rename APK
         run: |
@@ -72,11 +89,11 @@ jobs:
           target_commitish: ${{ github.sha }}
           name: Melasa ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v{0}', env.VERSION) }}
           body: |
-            First alpha of Melasa: touch drums and piano.
+            Melasa alpha: touch drums and piano.
 
-            - Drums: Black Pearl, Red Zeppelin, TR-808, Synth, each with its own skin
-            - Pianos: Grand, Upright, Honky-tonk, each with its own skin
-            - Adjustable drum layout, open/closed hi-hat, sustain, octave shift
-            - Works offline
+            - Native low-latency sound engine on Android (switchable in Credits)
+            - Every finger is tracked on its own: hold one pad and hit others, alternate both kick pads for double pedal
+            - Drums: Black Pearl, Red Zeppelin, TR-808, Synth; pianos: Grand, Upright, Honky-tonk
+            - Adjustable drum layout, skins, open/closed hi-hat, sustain, octave shift
 
-            Install: download the APK on your Android phone and open it. Android will ask you to allow installs from your browser or file app the first time.
+            Install: download the APK on your Android phone and open it. It installs over the previous version.

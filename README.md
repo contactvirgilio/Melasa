@@ -9,7 +9,8 @@ Touch drums and piano for phone and tablet.
 - Kit: crash, splash, ride, hi-hat (open + closed, closed chokes open), 3 toms, snare, double kick
 - Kits: Black Pearl, Red Zeppelin (acoustic, 5 velocity layers), TR-808, Synth
 - Pianos (separate screen, pick from the same menu): Grand, Upright, Honky-tonk. 2 octaves in landscape, 1 in portrait, octave shift, sustain. Press nearer the front of a key for louder.
-- Multi-touch: hit the center for louder, the rim for softer
+- Multi-touch: every finger is tracked on its own (hold one pad, hit others, alternate the two kick pads for double pedal); hit the center for louder, the rim for softer
+- Android app: native low-latency sound engine (Oboe, `android-native/`), with the Web Audio engine as fallback; switch in Credits
 - Each kit and piano has its own skin (Auto). Pick a different one from the Skin menu (under "Layout" for drums, in the toolbar for piano)
 - Tap "Layout" to move and resize pads (saved per orientation on the device)
 - Desktop keys (piano): A W S E D F T G Y H U J K = one octave from C

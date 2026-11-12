@@ -356,7 +356,8 @@
       <b>Upright</b> piano: Yamaha upright from the Versilian Community Sample Library (VCSL), CC0.
       <b>Honky-tonk</b> piano: Old Piano (Francis Bacon) from FreePats, CC0.
       All via <a href="https://github.com/danigb/samples" target="_blank" rel="noopener">github.com/danigb/samples</a>; one velocity layer, trimmed to MP3.</p>
-    <p class="version">Melasa 0.1.1 alpha · <span id="lat"></span></p>
+    <p id="engine-row" hidden>Sound engine: <b id="engine-name"></b>. <button id="engine-toggle" type="button"></button></p>
+    <p class="version">Melasa 0.2.0 alpha · <span id="lat"></span></p>
     <button id="credits-close" type="button" class="primary">Close</button>
   </div>
 </div>
@@ -367,7 +368,46 @@
 const Engine = (() => {
   let ctx, out, noiseBuf;
 
+  // Native Android engine (Oboe) when running inside the app; Web Audio otherwise
+  const N = window.MelasaNative;
+  let nativeOn = false, nativeFailed = false;
+  const store = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
+  function boot() {
+    if (!N || store.get('melasa-engine') === 'web') return;
+    if (store.get('melasa-native-boot') === 'pending') {   // last start never finished: don't retry automatically
+      nativeFailed = true; store.set('melasa-engine', 'web'); store.set('melasa-native-boot', ''); return;
+    }
+    store.set('melasa-native-boot', 'pending');
+    try { nativeOn = !!N.start(); } catch (e) { nativeOn = false; }
+    if (!nativeOn) store.set('melasa-native-boot', '');
+  }
+  const nIds = new Map(), nWait = new Map(); let nNext = 1;
+  window.melasaNativeLoaded = (token, ok, total) => {
+    const w = nWait.get(token); if (!w) return;
+    nWait.delete(token);
+    if (ok === total) w.ok(); else w.fail(new Error('native load ' + ok + '/' + total));
+  };
+  function nLoad(paths) {
+    const need = paths.filter(p => !nIds.has(p));
+    need.forEach(p => nIds.set(p, nNext++));
+    const ids = paths.map(p => nIds.get(p));
+    if (!need.length) return Promise.resolve(ids);
+    const token = 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    return new Promise((ok, fail) => {
+      nWait.set(token, { ok: () => { store.set('melasa-native-boot', 'ok'); ok(ids); }, fail: e => { need.forEach(p => nIds.delete(p)); fail(e); } });
+      N.load(token, need.map(p => nIds.get(p) + '\t' + p).join('\n'));
+    });
+  }
+  function pcm64(buf) {
+    const d = buf.getChannelData(0), a = new Int16Array(d.length);
+    for (let i = 0; i < d.length; i++) a[i] = Math.max(-1, Math.min(1, d[i])) * 32767;
+    const u = new Uint8Array(a.buffer); let str = '';
+    for (let i = 0; i < u.length; i += 0x8000) str += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+    return btoa(str);
+  }
+
   function init() {
+    if (nativeOn) return;
     if (ctx) { if (ctx.state !== 'running') ctx.resume(); return; }
     try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
     ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
@@ -461,10 +501,29 @@ const Engine = (() => {
   }
 
   // Closing the hi-hat chokes a ringing open hat
-  let openHat = [];
-  function choke(t) {
-    openHat.forEach(g => { g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(g.gain.value, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.03); });
-    openHat = [];
+  let openHat = null;   // web: gain node, native: voice id
+  function choke() {
+    if (!openHat) return;
+    if (nativeOn) N.release(openHat, 0.03);
+    else { const t = ctx.currentTime, g = openHat; g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(g.gain.value, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.03); }
+    openHat = null;
+  }
+
+  // The synth kit is rendered once into buffers, so a hit costs the same as a sample
+  const SYNTH_DUR = { kick: 0.6, snare: 0.4, tom1: 0.7, tom2: 0.8, tom3: 0.9, hihat: 0.2, hhopen: 1.1, splash: 0.8, crash: 2.0, ride: 1.5 };
+  async function renderSynth(sr) {
+    const rendered = {};
+    for (const p of Object.keys(SYNTH_DUR)) {
+      const off = new OfflineAudioContext(1, Math.ceil(sr * SYNTH_DUR[p]), sr);
+      const live = [ctx, out, noiseBuf];
+      ctx = off; out = off.destination;
+      noiseBuf = off.createBuffer(1, sr * 2, sr);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      try { sounds[p](1, 0); } finally { [ctx, out, noiseBuf] = live; }
+      rendered[p] = await off.startRendering();
+    }
+    return rendered;
   }
 
   const sounds = {
@@ -473,8 +532,8 @@ const Engine = (() => {
     tom1:   (v, t) => tom(200, v, t),
     tom2:   (v, t) => tom(150, v, t),
     tom3:   (v, t) => tom(95, v, t),
-    hihat:  (v, t) => { choke(t); metal(v * 0.5, t, { decay: 0.06, bp: 10000 }); },
-    hhopen: (v, t) => { choke(t); openHat = metal(v * 0.45, t, { decay: 0.9, bp: 10000, noiseAmt: 0.5 }); },
+    hihat:  (v, t) => metal(v * 0.5, t, { decay: 0.06, bp: 10000 }),
+    hhopen: (v, t) => metal(v * 0.45, t, { decay: 0.9, bp: 10000, noiseAmt: 0.5 }),
     splash: (v, t) => metal(v * 0.45, t, { decay: 0.6, bp: 9000, noiseAmt: 0.8 }),
     crash:  (v, t) => metal(v * 0.5, t, { decay: 1.8, bp: 8000, hp: 6000, noiseAmt: 1.2, attack: 0.004 }),
     ride:   (v, t) => metal(v * 0.4, t, { decay: 1.3, bp: 6500, hp: 4500, base: 52, noiseAmt: 0.3 }),
@@ -488,7 +547,8 @@ const Engine = (() => {
     'tr-808':       { layers: 1 },
     'synth':        { layers: 0 },
   };
-  const cache = {};       // kitId -> { piece: [AudioBuffer per layer] }
+  const cache = {};       // kitId -> { piece: [sample per layer] }; a sample is an AudioBuffer (web) or an id (native)
+  const loading = {};
   let kitId = 'synth';
 
   async function loadBuffer(url) {
@@ -503,40 +563,57 @@ const Engine = (() => {
     buf.startOffset = Math.max(0, (i - 24) / buf.sampleRate);
     return buf;
   }
+  const loadMany = paths => nativeOn ? nLoad(paths) : Promise.all(paths.map(loadBuffer));
+  function once(key, fn) {
+    if (!loading[key]) loading[key] = fn().finally(() => { delete loading[key]; });
+    return loading[key];
+  }
 
   async function setKit(id) {
     init();
     kitId = id;
-    const kit = KITS[id];
-    if (!kit || !kit.layers || cache[id]) return;
-    const bank = {};
-    await Promise.all(PIECES.map(async p => {
-      bank[p] = await Promise.all(Array.from({ length: kit.layers }, (_, i) => loadBuffer(`kits/${id}/${p}-${i + 1}.mp3`)));
-    }));
-    cache[id] = bank;
-  }
-
-  function playSample(buffers, name, v, t) {
-    const n = buffers.length;
-    const layer = Math.min(n - 1, Math.max(0, Math.ceil((v - 0.4) / 0.6 * n) - 1));
-    const src = ctx.createBufferSource();
-    src.buffer = buffers[layer];
-    const g = ctx.createGain();
-    g.gain.value = n > 1 ? 0.75 + 0.25 * v : v;   // layers carry the dynamics; gain fine-tunes
-    src.connect(g).connect(out);
-    src.start(t, src.buffer.startOffset || 0);
-    return g;
+    if (cache[id]) return;
+    return once('kit:' + id, async () => {
+      const bank = {};
+      if (id === 'synth') {
+        const rendered = await renderSynth(nativeOn ? 48000 : ctx.sampleRate);
+        for (const p of PIECES) {
+          if (nativeOn) { const sid = nNext++; N.loadPcm(sid, pcm64(rendered[p]), 48000); bank[p] = [sid]; }
+          else bank[p] = [rendered[p]];
+        }
+      } else {
+        const n = KITS[id].layers, paths = [];
+        PIECES.forEach(p => { for (let i = 1; i <= n; i++) paths.push(`kits/${id}/${p}-${i}.mp3`); });
+        const got = await loadMany(paths);
+        PIECES.forEach((p, k) => { bank[p] = got.slice(k * n, k * n + n); });
+      }
+      cache[id] = bank;
+    });
   }
 
   function play(name, v = 1) {
-    if (!ctx) init();
-    v = Math.max(0.05, Math.min(1, v));
-    const t = 0;   // 0 = as soon as possible
     const bank = cache[kitId];
-    if (!bank) return sounds[name](v, ctx.currentTime);   // synth kit, or kit still loading
-    if (name === 'hihat' || name === 'hhopen') choke(ctx.currentTime);
-    const g = playSample(bank[name], name, v, t);
-    if (name === 'hhopen') openHat = [g];
+    if (!bank) return;   // kit still loading
+    v = v < 0.05 ? 0.05 : v > 1 ? 1 : v;
+    const layers = bank[name], n = layers.length;
+    const layer = Math.min(n - 1, Math.max(0, Math.ceil((v - 0.4) / 0.6 * n) - 1));
+    const gain = n > 1 ? 0.75 + 0.25 * v : v;   // layers carry the dynamics; gain fine-tunes
+    const hat = name === 'hihat' || name === 'hhopen';
+    if (nativeOn) {
+      if (hat) choke();
+      const voice = N.play(layers[layer], gain, 1);
+      if (name === 'hhopen') openHat = voice;
+      return;
+    }
+    if (ctx.state !== 'running') ctx.resume();
+    if (hat) choke();
+    const src = ctx.createBufferSource();
+    src.buffer = layers[layer];
+    const g = ctx.createGain();
+    g.gain.value = gain;
+    src.connect(g).connect(out);
+    src.start(0, src.buffer.startOffset || 0);   // 0 = as soon as possible
+    if (name === 'hhopen') openHat = g;
   }
 
   /* ---------- Pianos ---------- */
@@ -547,19 +624,24 @@ const Engine = (() => {
   };
   const pianoCache = {};
   let pianoId = null, sustain = false;
-  const voices = new Map();   // midi -> { src, g }
+  const voices = new Map();   // midi -> { src, g } (web) or { n: voice id } (native)
   const sustained = new Set();
 
   async function setPiano(id) {
     init();
     pianoId = id;
     if (pianoCache[id]) return;
-    const bank = {};
-    await Promise.all(PIANOS[id].map(async m => { bank[m] = await loadBuffer(`pianos/${id}/${m}.mp3`); }));
-    pianoCache[id] = bank;
+    return once('piano:' + id, async () => {
+      const got = await loadMany(PIANOS[id].map(m => `pianos/${id}/${m}.mp3`));
+      const bank = {};
+      PIANOS[id].forEach((m, i) => { bank[m] = got[i]; });
+      pianoCache[id] = bank;
+    });
   }
 
-  function release(v, t) {
+  function release(v) {
+    if (v.n) return N.release(v.n, 0.5);
+    const t = ctx.currentTime;
     v.g.gain.cancelScheduledValues(t);
     v.g.gain.setValueAtTime(v.g.gain.value, t);
     v.g.gain.setTargetAtTime(0, t, 0.08);
@@ -567,43 +649,48 @@ const Engine = (() => {
   }
 
   function noteOn(m, vel = 0.8) {
-    if (!ctx) init();
     const bank = pianoCache[pianoId];
     if (!bank) return;
-    const t = ctx.currentTime;
-    if (voices.has(m)) { release(voices.get(m), t); voices.delete(m); }
+    if (voices.has(m)) { release(voices.get(m)); voices.delete(m); }
     sustained.delete(m);
     const near = PIANOS[pianoId].reduce((a, b) => Math.abs(b - m) < Math.abs(a - m) ? b : a);
+    const rate = Math.pow(2, (m - near) / 12), gain = 0.25 + 0.75 * vel;
+    if (nativeOn) { voices.set(m, { n: N.play(bank[near], gain, rate) }); return; }
+    if (ctx.state !== 'running') ctx.resume();
     const src = ctx.createBufferSource();
     src.buffer = bank[near];
-    src.playbackRate.value = Math.pow(2, (m - near) / 12);
+    src.playbackRate.value = rate;
     const g = ctx.createGain();
-    g.gain.value = 0.25 + 0.75 * vel;
+    g.gain.value = gain;
     src.connect(g).connect(out);
-    src.start(t, src.buffer.startOffset || 0);
+    src.start(0, src.buffer.startOffset || 0);
     voices.set(m, { src, g });
   }
 
   function noteOff(m) {
-    if (!ctx || !voices.has(m)) return;
+    if (!voices.has(m)) return;
     if (sustain) { sustained.add(m); return; }
-    release(voices.get(m), ctx.currentTime);
+    release(voices.get(m));
     voices.delete(m);
   }
 
   function setSustain(on) {
     sustain = on;
-    if (!on && ctx) {
-      sustained.forEach(m => { if (voices.has(m)) { release(voices.get(m), ctx.currentTime); voices.delete(m); } });
+    if (!on) {
+      sustained.forEach(m => { if (voices.has(m)) { release(voices.get(m)); voices.delete(m); } });
       sustained.clear();
     }
   }
 
-  const latency = () => ctx ? Math.round(((ctx.baseLatency || 0) + (ctx.outputLatency || 0)) * 1000) : null;
+  const latency = () => nativeOn ? Math.round(N.latencyMs()) || null
+    : ctx ? Math.round(((ctx.baseLatency || 0) + (ctx.outputLatency || 0)) * 1000) : null;
 
+  boot();
   return {
     init, play, latency, setKit, setPiano, noteOn, noteOff, setSustain,
-    isLoaded: (type, id) => type === 'piano' ? !!pianoCache[id] : (!KITS[id].layers || !!cache[id]),
+    isLoaded: (type, id) => type === 'piano' ? !!pianoCache[id] : !!cache[id],
+    hasNative: !!N, native: nativeOn, nativeFailed,
+    setEngine: e => { store.set('melasa-engine', e); store.set('melasa-native-boot', ''); location.reload(); },
   };
 })();
 
@@ -627,6 +714,7 @@ function applySkin() {
   const auto = type === 'drums' ? id : (document.body.dataset.kit || 'black-pearl');
   if (type === 'drums') document.body.dataset.kit = id;
   document.body.dataset.skin = skinSel.value === 'auto' ? auto : skinSel.value;
+  geomChanged();
 }
 skinSel.addEventListener('change', () => {
   try { localStorage.setItem('melasa-skin', skinSel.value); } catch (e) {}
@@ -656,28 +744,20 @@ const credits = document.getElementById('credits');
 document.getElementById('credits-btn').addEventListener('click', () => {
   const ms = Engine.latency();
   document.getElementById('lat').textContent = ms ? `audio delay on this device: ${ms} ms` : '';
+  if (Engine.hasNative) {
+    document.getElementById('engine-row').hidden = false;
+    document.getElementById('engine-name').textContent = Engine.native ? 'Native (lowest delay)' : 'Web';
+    document.getElementById('engine-toggle').textContent = Engine.native ? 'Use Web engine' : 'Use Native engine';
+  }
   credits.hidden = false;
 });
+document.getElementById('engine-toggle').addEventListener('click', () => Engine.setEngine(Engine.native ? 'web' : 'native'));
 document.getElementById('credits-close').addEventListener('click', () => { credits.hidden = true; });
 credits.addEventListener('pointerdown', e => { if (e.target === credits) credits.hidden = true; });
 
 start.addEventListener('pointerdown', e => { e.preventDefault(); Engine.init(); start.hidden = true; chooseKit(); });
 start.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { Engine.init(); start.hidden = true; chooseKit(); } });
 
-document.querySelectorAll('.pad').forEach(pad => {
-  pad.addEventListener('pointerdown', e => {
-    e.preventDefault();
-    if (editing) return;
-    // Velocity: center hits are louder, rim hits softer
-    const r = pad.getBoundingClientRect();
-    const dx = e.clientX - (r.left + r.width / 2);
-    const dy = e.clientY - (r.top + r.height / 2);
-    const dist = Math.min(1, Math.hypot(dx, dy) / (r.width / 2));
-    Engine.play(pad.dataset.snd, 1 - dist * 0.6);
-    pad.classList.remove('hit'); void pad.offsetWidth; pad.classList.add('hit');
-    clearTimeout(pad._t); pad._t = setTimeout(() => pad.classList.remove('hit'), 90);
-  });
-});
 /* ---------- Adjustable layout (saved per orientation on this device) ---------- */
 const pads = [...document.querySelectorAll('.pad')];
 const STORE = 'melasa-layout-v1';
@@ -708,11 +788,13 @@ function setEditing(on) {
   hint.textContent = 'Drag pads to move. Drag the dot to resize.';
   hint.hidden = !on;
   if (!on) save();
+  geomChanged();
 }
 document.getElementById('edit').addEventListener('click', () => setEditing(true));
 document.getElementById('done').addEventListener('click', () => setEditing(false));
 document.getElementById('reset').addEventListener('click', () => {
   applyLayout(defaults);
+  geomChanged();
   try { localStorage.removeItem(STORE); } catch (e) {}
 });
 
@@ -750,6 +832,50 @@ pads.forEach(pad => {
   pad.addEventListener('pointercancel', end);
 });
 
+/* ---------- Playing the pads ----------
+   One touchstart listener for the whole kit, hit-tested against cached pad positions.
+   Every finger is handled on its own, so holding one pad never blocks another, and
+   nothing between the touch and the sound makes the browser recompute layout. */
+const stage = document.getElementById('stage');
+let geom = [], geomDirty = true;
+function measure() {
+  const square = document.body.dataset.skin === 'tr-808';
+  geom = pads.map(el => {
+    const r = el.getBoundingClientRect();
+    return { el, snd: el.dataset.snd, cx: r.left + r.width / 2, cy: r.top + r.height / 2, r: r.width / 2 || 1, square };
+  });
+  geomDirty = false;
+}
+function geomChanged() {
+  geomDirty = true;
+  requestAnimationFrame(() => { if (geomDirty && !stage.hidden) measure(); });
+}
+const HIT = [
+  { transform: 'translate(-50%, -50%) scale(.93)', filter: 'brightness(1.3)' },
+  { transform: 'translate(-50%, -50%) scale(1)', filter: 'brightness(1)' },
+];
+function hit(x, y) {
+  if (geomDirty) measure();
+  let best = null, bd = 1.12;   // a near miss just outside the rim still counts
+  for (let i = 0; i < geom.length; i++) {
+    const g = geom[i], dx = x - g.cx, dy = y - g.cy;
+    const d = (g.square ? Math.max(Math.abs(dx), Math.abs(dy)) : Math.sqrt(dx * dx + dy * dy)) / g.r;
+    if (d < bd) { bd = d; best = g; }
+  }
+  if (!best) return;
+  Engine.play(best.snd, 1 - (bd > 1 ? 1 : bd) * 0.6);   // sound first; center louder, rim softer
+  if (best.el.animate) best.el.animate(HIT, { duration: 110, easing: 'ease-out' });
+}
+stage.addEventListener('touchstart', e => {
+  if (editing) return;
+  e.preventDefault();   // also stops long-press and gesture detection on held fingers
+  const ts = e.changedTouches;
+  for (let i = 0; i < ts.length; i++) hit(ts[i].clientX, ts[i].clientY);
+}, { passive: false });
+['touchmove', 'touchend', 'touchcancel'].forEach(t => stage.addEventListener(t, e => { if (!editing) e.preventDefault(); }, { passive: false }));
+stage.addEventListener('pointerdown', e => { if (!editing && e.pointerType === 'mouse') hit(e.clientX, e.clientY); });
+addEventListener('resize', geomChanged);
+
 document.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('gesturestart', e => e.preventDefault());
 
@@ -769,6 +895,7 @@ function buildKeys() {
   const whites = [];
   for (let m = lo; m <= hi; m++) if (!isBlack(m)) whites.push(m);
   keysEl.innerHTML = '';
+  keyGeom = null; held.clear();
   whites.forEach(m => {
     const k = document.createElement('div');
     k.className = 'white'; k.dataset.midi = m;
@@ -789,43 +916,68 @@ function buildKeys() {
   fitToolbar();
 }
 function fitToolbar() {
+  keyGeom = null;
   document.documentElement.style.setProperty('--toolbar-h', (document.querySelector('.tools').offsetHeight + 20) + 'px');
 }
 
-const held = new Map();   // pointerId -> midi
-function keyAt(x, y) {
-  const el = document.elementFromPoint(x, y);
-  return el && el.dataset && el.dataset.midi && keysEl.contains(el) ? el : null;
+const held = new Map();   // finger id -> midi
+let keyGeom = null;        // cached key rectangles, rebuilt after layout changes
+function measureKeys() {
+  keyGeom = [...keysEl.children].map(el => {
+    const b = el.getBoundingClientRect(), black = el.classList.contains('black');
+    return { el, m: +el.dataset.midi, black, l: b.left - (black ? 0 : 1), r: b.right + (black ? 0 : 1), t: b.top, b: b.bottom };
+  });
 }
-function press(pid, el, y) {
-  const m = +el.dataset.midi;
-  const r = el.getBoundingClientRect();
-  const vel = clamp(0.45 + 0.55 * (y - r.top) / r.height, 0.3, 1);   // play nearer the front edge for louder
-  held.set(pid, m);
-  el.classList.add('on');
-  Engine.noteOn(m, vel);
+function keyAt(x, y) {
+  if (!keyGeom) measureKeys();
+  let white = null;
+  for (let i = 0; i < keyGeom.length; i++) {
+    const k = keyGeom[i];
+    if (x >= k.l && x < k.r && y >= k.t && y <= k.b) { if (k.black) return k; white = k; }
+  }
+  return white;
+}
+function press(pid, k, y) {
+  const vel = clamp(0.45 + 0.55 * (y - k.t) / (k.b - k.t), 0.3, 1);   // play nearer the front edge for louder
+  held.set(pid, k.m);
+  Engine.noteOn(k.m, vel);
+  k.el.classList.add('on');
 }
 function lift(pid) {
   if (!held.has(pid)) return;
   const m = held.get(pid);
   held.delete(pid);
-  if (![...held.values()].includes(m)) {
-    Engine.noteOff(m);
-    const el = keysEl.querySelector(`[data-midi="${m}"]`);
-    if (el) el.classList.remove('on');
-  }
+  for (const other of held.values()) if (other === m) return;
+  Engine.noteOff(m);
+  const k = keyGeom && keyGeom.find(k => k.m === m);
+  if (k) k.el.classList.remove('on');
 }
-keysEl.addEventListener('pointerdown', e => {
+function slide(pid, x, y) {
+  if (!held.has(pid)) return;
+  const k = keyAt(x, y);
+  if (k && k.m !== held.get(pid)) { lift(pid); press(pid, k, y); }
+}
+keysEl.addEventListener('touchstart', e => {
   e.preventDefault();
-  const el = keyAt(e.clientX, e.clientY);
-  if (el) press(e.pointerId, el, e.clientY);
+  for (const t of e.changedTouches) { const k = keyAt(t.clientX, t.clientY); if (k) press(t.identifier, k, t.clientY); }
+}, { passive: false });
+keysEl.addEventListener('touchmove', e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) slide(t.identifier, t.clientX, t.clientY);
+}, { passive: false });
+['touchend', 'touchcancel'].forEach(type => keysEl.addEventListener(type, e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) lift(t.identifier);
+}, { passive: false }));
+keysEl.addEventListener('pointerdown', e => {
+  if (e.pointerType !== 'mouse') return;
+  e.preventDefault();
+  try { keysEl.setPointerCapture(e.pointerId); } catch (err) {}
+  const k = keyAt(e.clientX, e.clientY);
+  if (k) press('mouse', k, e.clientY);
 });
-keysEl.addEventListener('pointermove', e => {
-  if (!held.has(e.pointerId)) return;
-  const el = keyAt(e.clientX, e.clientY);
-  if (el && +el.dataset.midi !== held.get(e.pointerId)) { lift(e.pointerId); press(e.pointerId, el, e.clientY); }
-});
-['pointerup', 'pointercancel'].forEach(t => keysEl.addEventListener(t, e => lift(e.pointerId)));
+keysEl.addEventListener('pointermove', e => { if (e.pointerType === 'mouse') slide('mouse', e.clientX, e.clientY); });
+['pointerup', 'pointercancel'].forEach(t => keysEl.addEventListener(t, e => { if (e.pointerType === 'mouse') lift('mouse'); }));
 
 document.getElementById('oct-down').addEventListener('click', () => { octave--; buildKeys(); });
 document.getElementById('oct-up').addEventListener('click', () => { octave++; buildKeys(); });
@@ -837,10 +989,12 @@ sustainBtn.addEventListener('click', () => {
 });
 let lastShown = octavesShown();
 addEventListener('resize', () => {
-  fitToolbar();
+  fitToolbar(); keyGeom = null;
   if (document.body.classList.contains('mode-piano') && octavesShown() !== lastShown) { lastShown = octavesShown(); buildKeys(); }
 });
 applyMode();
+if (Engine.native) { start.querySelector('small').textContent = 'Native sound engine'; chooseKit(); }   // preload before the first tap
+if (Engine.nativeFailed) { hint.textContent = 'The native sound engine did not start last time, so the web engine is on. You can retry in Credits.'; hint.hidden = false; }
 
 /* Desktop keys: drums, or piano keys on the home row */
 const KEYS = { z: 'hhopen', a: 'hihat', s: 'snare', d: 'tom1', f: 'tom2', g: 'tom3', ' ': 'kick', q: 'crash', w: 'splash', e: 'ride' };
@@ -862,8 +1016,12 @@ document.addEventListener('keyup', e => {
 <!--ARTIFACT-END-->
 <script>
   // Offline support when hosted (GitHub Pages etc.)
-  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator) {
+    if (window.Capacitor || window.MelasaNative) {
+      navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister())).catch(() => {});
+    } else if (location.protocol === 'https:' || location.hostname === 'localhost') {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
   }
 </script>
 </body>

@@ -1,5 +1,5 @@
 // Melasa service worker: caches the app and every sample so it plays offline.
-const VERSION = 'melasa-0.1.1-alpha';
+const VERSION = 'melasa-0.2.0-alpha';
 const FILES = [
   './',
   'index.html',
@@ -173,17 +173,28 @@ const FILES = [
   'pianos/upright/96.mp3'
 ];
 
+// Inside the Android app the files are already on the device: an older version of this
+// worker may still be installed there, so this one removes itself and reloads the page.
+const IN_APP = self.location.hostname === 'localhost' && !self.location.port;
+
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
+  e.waitUntil((IN_APP ? Promise.resolve() : caches.open(VERSION).then(c => c.addAll(FILES))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', e => {
+  if (IN_APP) {
+    e.waitUntil(caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))))
+      .then(() => self.registration.unregister())
+      .then(() => self.clients.matchAll({ type: 'window' }))
+      .then(cs => cs.forEach(c => c.navigate(c.url))));
+    return;
+  }
   e.waitUntil(caches.keys()
     .then(keys => Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 
 self.addEventListener('fetch', e => {
-  if (e.request.method !== 'GET') return;
+  if (IN_APP || e.request.method !== 'GET') return;
   e.respondWith(caches.match(e.request, { ignoreSearch: true }).then(hit => hit || fetch(e.request)));
 });
